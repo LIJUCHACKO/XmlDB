@@ -1,4 +1,4 @@
-# ods2csv
+# About
 This is a Go package to treat xml as a database. You access, modify and replace node
 
 For Example see :"https://github.com/LIJUCHACKO/ods2csv_xmlDB"
