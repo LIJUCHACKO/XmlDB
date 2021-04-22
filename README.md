@@ -1,5 +1,5 @@
 # About
-This is a Go package to treat xml as a database. You access, modify and replace node
+This is a Go package to treat xml as a database. You can access, modify or replace node
 
 For Example see :"https://github.com/LIJUCHACKO/ods2csv_xmlDB"
 
