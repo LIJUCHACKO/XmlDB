@@ -347,8 +347,19 @@ func splitxmlinLines(lines []string) []string {
 				part = strings.TrimSpace(part)
 				if len(strings.TrimSpace(part)) > 0 {
 					if i < len(parts)-1 {
+						if strings.TrimSpace(part)[0:1] == "<?" {
+							if len(newline) > 0 {
+								newlines = append(newlines, newline)
+							}
+							newline = part + ">"
 
-						if strings.TrimSpace(part)[0:1] == "<" {
+						} else if strings.TrimSpace(part)[0:1] == "<!" {
+							if len(newline) > 0 {
+								newlines = append(newlines, newline)
+							}
+							newline = part + ">"
+
+						} else if strings.TrimSpace(part)[0:1] == "<" {
 							if len(newline) > 0 {
 								newlines = append(newlines, newline)
 							}
@@ -495,7 +506,7 @@ func Load_dbcontent(DB *Database, content []string) {
 	path := ""
 
 	for _, line := range DB.global_dbLines {
-		if strings.Contains(line, "<?xml") {
+		if strings.Contains(line, "<?xml") || strings.Contains(line, "<!DOCTYPE") {
 			DB.global_values = append(DB.global_values, "")
 			DB.global_ids = append(DB.global_ids, -1)
 			DB.global_paths = append(DB.global_paths, "")
@@ -690,7 +701,7 @@ func ReplaceNode(DB *Database, nodeId int, sub_xml string) []int {
 		fmt.Printf("replaceNode :Replacing node %d\n", nodeId)
 	}
 	startindex := NodeLine(DB, nodeId)
-	RemoveNode(DB, startindex)
+	RemoveNode(DB, nodeId)
 	nodes := InsertAtLine(DB, startindex, sub_xml)
 	return nodes
 }
