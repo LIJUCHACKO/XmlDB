@@ -347,19 +347,7 @@ func splitxmlinLines(lines []string) []string {
 				part = strings.TrimSpace(part)
 				if len(strings.TrimSpace(part)) > 0 {
 					if i < len(parts)-1 {
-						if strings.TrimSpace(part)[0:1] == "<?" {
-							if len(newline) > 0 {
-								newlines = append(newlines, newline)
-							}
-							newline = part + ">"
-
-						} else if strings.TrimSpace(part)[0:1] == "<!" {
-							if len(newline) > 0 {
-								newlines = append(newlines, newline)
-							}
-							newline = part + ">"
-
-						} else if strings.TrimSpace(part)[0:1] == "<" {
+						if strings.TrimSpace(part)[0:1] == "<" {
 							if len(newline) > 0 {
 								newlines = append(newlines, newline)
 							}
