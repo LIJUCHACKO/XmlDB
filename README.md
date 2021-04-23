@@ -62,4 +62,4 @@ This is document title
 ```
 5 Searching using attribute value.
 
-`identifiedNodes, _ := GetNode(DB, 0, "body*[style="123"]/h1"`
+`identifiedNodes, _ := GetNode(DB, 0, "body*[style="123"]/h1")`
