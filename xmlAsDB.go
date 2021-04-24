@@ -191,7 +191,7 @@ func isParentPath(parentp string, nodep string) bool {
 	}
 	return false
 }
-func get_common(set1 []int, set2 []int) []int {
+func Get_common(set1 []int, set2 []int) []int {
 	var result []int
 	for _, element1 := range set1 {
 		for _, element2 := range set1 {
