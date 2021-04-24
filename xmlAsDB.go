@@ -76,8 +76,8 @@ func updateNodenoLineMap(DB *Database, fromLine int) {
 }
 func stringtono(line string) int {
 	total := 0
-	for _, ch := range line {
-		total = total + int(ch)
+	for i, ch := range line {
+		total = total + int(ch)*i
 	}
 	if total > MaxInt {
 		total = total - MaxInt
@@ -795,6 +795,9 @@ func replaceNodeRetainid(DB *Database, nodeId int, sub_xml string) []int {
 	}
 	startindex := NodeLine(DB, nodeId)
 	removed := RemoveNode(DB, nodeId)
+	DB.deleted_ids = remove(DB.deleted_ids, len(DB.deleted_ids)-len(removed))
+	// fmt.Printf("deletedids\n")
+	// fmt.Println(DB.deleted_ids)
 	nodes := insertAtLine(DB, startindex, sub_xml, removed[0])
 	return nodes
 }
