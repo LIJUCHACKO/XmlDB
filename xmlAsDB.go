@@ -43,18 +43,19 @@ func readLines(path string) ([]string, error) {
 }
 
 type Database struct {
-	filename            string
-	removeattribute     string
-	global_ids          []int
-	global_paths        []string
-	global_dbLines      []string
-	global_values       []string
-	global_attributes   []string
-	global_lineUniqueid int
-	Debug_enabled       bool
-	nodeNoToLineno      [MaxInt]int
-	pathKeylookup       [MaxInt][]int
-	totaldblines        int
+	filename                string
+	removeattribute         string
+	global_ids              []int
+	deleted_ids             []int
+	global_paths            []string
+	global_dbLines          []string
+	global_values           []string
+	global_attributes       []string
+	global_lineLastUniqueid int
+	Debug_enabled           bool
+	nodeNoToLineno          [MaxInt]int
+	pathKeylookup           [MaxInt][]int
+	totaldblines            int
 }
 
 func updateNodenoLineMap(DB *Database, fromLine int) {
@@ -486,7 +487,7 @@ func save_db(DB *Database) {
 func Load_dbcontent(DB *Database, content []string) {
 
 	DB.global_dbLines = splitxmlinLines(content)
-	DB.global_lineUniqueid = 0
+	DB.global_lineLastUniqueid = 0
 	DB.removeattribute = ""
 	if DB.Debug_enabled {
 		fmt.Printf("load_db :formating over\n")
@@ -501,7 +502,7 @@ func Load_dbcontent(DB *Database, content []string) {
 			DB.global_attributes = append(DB.global_attributes, "")
 			continue
 		}
-		path = update_path(DB, line, path, DB.global_lineUniqueid)
+		path = update_path(DB, line, path, DB.global_lineLastUniqueid)
 		//fmt.Printf("\npath-%s", path)
 		Value := ""
 		parts := strings.Split(line, ">")
@@ -539,18 +540,18 @@ func Load_dbcontent(DB *Database, content []string) {
 			}
 		}
 		DB.global_values = append(DB.global_values, Value)
-		DB.global_ids = append(DB.global_ids, DB.global_lineUniqueid)
+		DB.global_ids = append(DB.global_ids, DB.global_lineLastUniqueid)
 		DB.global_paths = append(DB.global_paths, path)
-		DB.global_lineUniqueid++
-		if DB.global_lineUniqueid >= MaxInt {
-			fmt.Printf("load_db: global_lineUniqueid>=MaxInt")
+		DB.global_lineLastUniqueid++
+		if DB.global_lineLastUniqueid >= MaxInt {
+			fmt.Printf("load_db: Total no. of Uniqueid>= MaxInt, Please increase MaxInt")
 			os.Exit(1)
 		}
 	}
 	updateNodenoLineMap(DB, 0)
 
 	if DB.Debug_enabled {
-		fmt.Printf("load_db :xml db loaded\n No of nodes-%d\n", DB.global_lineUniqueid)
+		fmt.Printf("load_db :xml db loaded\n No of nodes-%d\n", DB.global_lineLastUniqueid)
 	}
 }
 func Load_db(DB *Database, filename string) {
@@ -615,6 +616,7 @@ func RemoveNode(DB *Database, nodeId int) {
 	end := NodeEnd(DB, nodeId)
 	for i := startindex; i < end; i++ {
 		DB.global_dbLines = remove_string(DB.global_dbLines, startindex)
+		DB.deleted_ids = append(DB.deleted_ids, DB.global_ids[startindex])
 		DB.global_ids = remove(DB.global_ids, startindex)
 		DB.global_paths = remove_string(DB.global_paths, startindex)
 		DB.global_values = remove_string(DB.global_values, startindex)
@@ -634,7 +636,19 @@ func InsertAtLine(DB *Database, lineno int, sub_xml string) []int {
 	newlines := strings.Split(sub_xml, "\n")
 	additional_lines := splitxmlinLines(newlines)
 	for _, line := range additional_lines {
-		path = update_path(DB, line, path, DB.global_lineUniqueid)
+		unique_id := DB.global_lineLastUniqueid
+
+		if DB.global_lineLastUniqueid >= MaxInt {
+			if len(DB.deleted_ids) > 0 {
+				unique_id = DB.deleted_ids[0]
+				DB.deleted_ids = DB.deleted_ids[1:]
+			} else {
+				fmt.Printf("InsertAtLine: Total no. of Uniqueid>= MaxInt, Please increase MaxInt")
+				os.Exit(1)
+			}
+		}
+
+		path = update_path(DB, line, path, unique_id)
 		if DB.Debug_enabled {
 			fmt.Printf("insertatline :Inserting %s  %s\n", line, path)
 		}
@@ -671,14 +685,19 @@ func InsertAtLine(DB *Database, lineno int, sub_xml string) []int {
 		}
 		DB.global_dbLines = insert_string(DB.global_dbLines, startindex, line)
 		DB.global_values = insert_string(DB.global_values, startindex, Value)
-		DB.global_ids = insert(DB.global_ids, startindex, DB.global_lineUniqueid)
+		DB.global_ids = insert(DB.global_ids, startindex, unique_id)
 		DB.global_paths = insert_string(DB.global_paths, startindex, path)
-		nodes = append(nodes, DB.global_lineUniqueid)
-		DB.global_lineUniqueid++
+		nodes = append(nodes, unique_id)
+
 		if DB.Debug_enabled {
-			fmt.Printf("insertatline :Inserting New Node %d\n", DB.global_lineUniqueid)
+			fmt.Printf("insertatline :Inserting New Node %d\n", unique_id)
 		}
 		startindex++
+
+		if DB.global_lineLastUniqueid < MaxInt {
+			DB.global_lineLastUniqueid++
+		}
+
 	}
 	updateNodenoLineMap(DB, startindex_tmp-1)
 
