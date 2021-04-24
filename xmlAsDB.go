@@ -771,7 +771,7 @@ func insertAtLine(DB *Database, lineno int, sub_xml string, retainid int) []int 
 		}
 		startindex++
 
-		if DB.global_lineLastUniqueid < MaxInt {
+		if DB.global_lineLastUniqueid < MaxInt && unique_id == DB.global_lineLastUniqueid {
 			DB.global_lineLastUniqueid++
 		}
 
