@@ -437,7 +437,7 @@ func NodeEnd(DB *Database, nodeId int) int {
 		fmt.Printf("Warning :node  doesnot exist\n")
 		return -1
 	}
-	
+
 	if DB.Nodeendlookup[nodeId] >= 0 {
 
 		lineno = DB.nodeNoToLineno[DB.Nodeendlookup[nodeId]] + 1
@@ -449,19 +449,21 @@ func NodeEnd(DB *Database, nodeId int) int {
 	return lineno
 
 }
-func saveas_db(DB *Database, filename string) {
-	err := writeLines(DB.global_dbLines, filename)
+func SaveAs_DB(DB *Database, filename string) {
+	lines := formatxml(DB.global_dbLines)
+	err := writeLines(lines, filename)
 	if err != nil {
 		fmt.Printf("Cannot save db  : %s\n", err)
 
 	}
 }
-func save_db(DB *Database) {
+func Save_DB(DB *Database) {
 	if len(DB.filename) == 0 {
 		fmt.Printf("Filename not specified\n")
 		return
 	}
-	err := writeLines(DB.global_dbLines, DB.filename)
+	lines := formatxml(DB.global_dbLines)
+	err := writeLines(lines, DB.filename)
 	if err != nil {
 		fmt.Printf("Cannot save db  : %s\n", err)
 

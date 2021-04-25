@@ -53,5 +53,6 @@ func main() {
 		fmt.Printf("\nafter adding Attribute-\n%s", xmlDB.GetNodeContents(DB, node))
 
 	}
+	xmlDB.SaveAs_DB(DB, "sample_mod.html")
 
 }
