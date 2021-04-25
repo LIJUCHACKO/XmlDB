@@ -59,11 +59,11 @@ This is a Go package to treat xml as a native database. You can access, modify o
 ```
 This is document title
 ```
-5 Searching using attribute value.
+5. Searching using attribute value.
 
-`identifiedNodes, _ = xmlDB.GetNode(DB, 0, "<x>*[style=\"123\"]/h1")`
+    `identifiedNodes, _ = xmlDB.GetNode(DB, 0, "<x>*[style=\"123\"]/h1")`
 
-6 Updating node
+6. Updating node
 
 ```
 	fmt.Printf("\n### Updating node value##\n")
@@ -108,5 +108,8 @@ after adding Attribute-
 </body>
 ```
 
+7. Recursive search.
 
-Also Example see :"https://github.com/LIJUCHACKO/ods2csv_xmlDB". I have used this library to parse ods xml content.
+     `identifiedNodes, _ = xmlDB.GetNode(DB, 0, "../h1")`
+
+Also see Example  :"https://github.com/LIJUCHACKO/ods2csv_xmlDB". I have used this library to parse ods xml content.
