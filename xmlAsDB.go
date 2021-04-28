@@ -43,28 +43,30 @@ func readLines(path string) ([]string, error) {
 }
 
 type Database struct {
-	filename                string
-	removeattribute         string
-	global_ids              []int
-	deleted_ids             []int
-	global_paths            []string
-	global_dbLines          []string
-	global_values           []string
-	global_attributes       []string
-	global_lineLastUniqueid int
-	Debug_enabled           bool
-	nodeNoToLineno          [MaxInt]int
-	pathKeylookup           [MaxInt][]int
-	Nodeendlookup           [MaxInt]int
-	totaldblines            int
-	pathIdStack             []int
+	filename                 string
+	removeattribute          string
+	global_ids               []int
+	deleted_ids              []int
+	global_paths             []string
+	global_dbLines           []string
+	global_values            []string
+	global_attributes        []string
+	global_lineLastUniqueid  int
+	Debug_enabled            bool
+	nodeNoToLineno           [MaxInt]int
+	pathKeylookup            [MaxInt][]int
+	Nodeendlookup            [MaxInt]int
+	pathIdStack              []int
+	suspectedLineStarts      [MaxInt / 2]int
+	suspectedLineEnds        [MaxInt / 2]int
+	susplock                 bool
+	reference_linenotoinsert int
 }
 
 func updateNodenoLineMap(DB *Database, fromLine int) {
-	DB.totaldblines = len(DB.global_dbLines)
 	lineno := fromLine
 	for {
-		if lineno >= DB.totaldblines {
+		if lineno >= len(DB.global_dbLines) {
 			break
 		}
 		id := DB.global_ids[lineno]
@@ -86,15 +88,12 @@ func stringtono(line string) int {
 	return total
 }
 
-var suspectedLineStarts [MaxInt]int
-var suspectedLineEnds [MaxInt]int
-var susplock bool
+func suspectedLinenos(DB *Database, path string, lowerbound int, upperbound int) int {
 
-func suspectedLinenos(DB *Database, path string) int {
-	for susplock {
-		fmt.Printf("susplock")
+	for DB.susplock {
+		fmt.Printf("DB.susplock")
 	}
-	susplock = true
+	DB.susplock = true
 	pathParts := strings.Split(path, "/")
 	var NodeNos []int
 	SearchtillEnd := 0
@@ -110,26 +109,28 @@ func suspectedLinenos(DB *Database, path string) int {
 			SearchtillEnd = 1
 
 		} else {
-			NodeNos = DB.pathKeylookup[stringtono(part)]
-
+			hashno := stringtono(part)
+			from := find_indexhashtable(DB, hashno, lowerbound, false)
+			to := find_indexhashtable(DB, hashno, upperbound, true)
+			NodeNos = DB.pathKeylookup[hashno][from:to]
 			break
 		}
 		index--
 	}
 
 	if len(NodeNos) == 0 {
+		DB.suspectedLineStarts[0] = 0
+		DB.suspectedLineEnds[0] = len(DB.global_dbLines)
 
-		suspectedLineStarts[0] = 0
-		suspectedLineEnds[0] = DB.totaldblines
 		return 1
 	} else {
-		for index, node := range NodeNos {
+		for i, node := range NodeNos {
 
-			suspectedLineStarts[index] = DB.nodeNoToLineno[node]
+			DB.suspectedLineStarts[i] = DB.nodeNoToLineno[node]
 			if SearchtillEnd == 1 {
-				suspectedLineEnds[index] = DB.nodeNoToLineno[DB.Nodeendlookup[node]] + 1
+				DB.suspectedLineEnds[i] = DB.nodeNoToLineno[DB.Nodeendlookup[node]] + 1
 			} else {
-				suspectedLineEnds[index] = DB.nodeNoToLineno[node]
+				DB.suspectedLineEnds[i] = DB.nodeNoToLineno[node]
 			}
 		}
 	}
@@ -221,6 +222,175 @@ func remove(a []int, index int) []int {
 	a = append(a[:index], a[index+1:]...) // index < len(a)
 	return a
 }
+
+func removeid_fromhashtable(DB *Database, hashno int, nodeId int) {
+
+	//fmt.Printf("\nremoveid_fromhashtable-entry")
+	//fmt.Println(nodeId)
+	//fmt.Println(DB.pathKeylookup[hashno])
+	lineno := DB.nodeNoToLineno[nodeId]
+	LowLM := 0
+	UpLM := len(DB.pathKeylookup[hashno]) - 1
+	MidLM := 0
+	index := -1
+	for {
+		MidLM = int((LowLM + UpLM) / 2)
+		if lineno >= DB.nodeNoToLineno[DB.pathKeylookup[hashno][LowLM]] && lineno <= DB.nodeNoToLineno[DB.pathKeylookup[hashno][MidLM]] {
+			UpLM = MidLM
+		} else if lineno > DB.nodeNoToLineno[DB.pathKeylookup[hashno][MidLM]] && lineno <= DB.nodeNoToLineno[DB.pathKeylookup[hashno][UpLM]] {
+			LowLM = MidLM
+		} else {
+			//fmt.Printf("\nbreak1")
+			break
+		}
+		//fmt.Printf("\n%d  %d  %d", UpLM, MidLM, LowLM)
+		if UpLM == LowLM || UpLM == (LowLM+1) {
+			if DB.pathKeylookup[hashno][UpLM] == nodeId {
+				index = UpLM
+				break
+			}
+			if DB.pathKeylookup[hashno][LowLM] == nodeId {
+				index = LowLM
+				break
+			}
+			break
+		}
+
+	}
+	if index < 0 {
+		return
+	}
+	//fmt.Printf("\nremoveid_fromhashtable-%d %d", DB.pathKeylookup[hashno][index], index)
+	DB.pathKeylookup[hashno] = append(DB.pathKeylookup[hashno][:index], DB.pathKeylookup[hashno][index+1:]...) // index < len(a)
+	//fmt.Println(DB.pathKeylookup[hashno])
+	return
+}
+func find_indexhashtable(DB *Database, hashno int, node_lineno int, roof bool) int {
+	LowLM := 0
+	UpLM := len(DB.pathKeylookup[hashno]) - 1
+	MidLM := 0
+	index := -1
+	//node_lineno := DB.nodeNoToLineno[nodeId]
+
+	for {
+		MidLM = int((LowLM + UpLM) / 2)
+		if roof {
+			if node_lineno >= DB.nodeNoToLineno[DB.pathKeylookup[hashno][LowLM]] && node_lineno < DB.nodeNoToLineno[DB.pathKeylookup[hashno][MidLM]] {
+				if DB.nodeNoToLineno[DB.pathKeylookup[hashno][LowLM]] == DB.nodeNoToLineno[DB.pathKeylookup[hashno][MidLM]] {
+					LowLM = MidLM
+				} else {
+					UpLM = MidLM
+				}
+
+			} else if node_lineno >= DB.nodeNoToLineno[DB.pathKeylookup[hashno][MidLM]] && node_lineno <= DB.nodeNoToLineno[DB.pathKeylookup[hashno][UpLM]] {
+				if DB.nodeNoToLineno[DB.pathKeylookup[hashno][UpLM]] == DB.nodeNoToLineno[DB.pathKeylookup[hashno][MidLM]] {
+					UpLM = MidLM
+				} else {
+					LowLM = MidLM
+				}
+
+			} else {
+				break
+			}
+		} else {
+			if node_lineno >= DB.nodeNoToLineno[DB.pathKeylookup[hashno][LowLM]] && node_lineno <= DB.nodeNoToLineno[DB.pathKeylookup[hashno][MidLM]] {
+				if DB.nodeNoToLineno[DB.pathKeylookup[hashno][LowLM]] == DB.nodeNoToLineno[DB.pathKeylookup[hashno][MidLM]] {
+					LowLM = MidLM
+				} else {
+					UpLM = MidLM
+				}
+
+			} else if node_lineno > DB.nodeNoToLineno[DB.pathKeylookup[hashno][MidLM]] && node_lineno <= DB.nodeNoToLineno[DB.pathKeylookup[hashno][UpLM]] {
+				if DB.nodeNoToLineno[DB.pathKeylookup[hashno][UpLM]] == DB.nodeNoToLineno[DB.pathKeylookup[hashno][MidLM]] {
+					UpLM = MidLM
+				} else {
+					LowLM = MidLM
+				}
+
+			} else {
+				break
+			}
+		}
+
+		//fmt.Printf("\n%d  %d  %d", UpLM, MidLM, LowLM)
+		if UpLM == LowLM || UpLM == (LowLM+1) {
+			index = UpLM
+			break
+		}
+
+	}
+	if index < 0 {
+		if node_lineno < DB.nodeNoToLineno[DB.pathKeylookup[hashno][0]] {
+			index = 0
+		} else {
+			index = len(DB.pathKeylookup[hashno])
+		}
+
+	}
+	return index
+}
+func insertid_intohashtable(DB *Database, hashno int, nodeId int) {
+
+	//fmt.Printf("\ninsertid_intohashtable-entry")
+	if len(DB.pathKeylookup[hashno]) == 0 {
+		DB.pathKeylookup[hashno] = append(DB.pathKeylookup[hashno], nodeId)
+		return
+	}
+	//fmt.Println(DB.pathKeylookup[hashno])
+	lineno := DB.reference_linenotoinsert
+	//fmt.Println(nodeId)
+	LowLM := 0
+	UpLM := len(DB.pathKeylookup[hashno]) - 1
+	MidLM := 0
+	index := -1
+
+	if DB.nodeNoToLineno[DB.pathKeylookup[hashno][LowLM]] == DB.nodeNoToLineno[DB.pathKeylookup[hashno][UpLM]] {
+		DB.pathKeylookup[hashno] = append(DB.pathKeylookup[hashno], nodeId)
+		return
+	}
+	for {
+		MidLM = int((LowLM + UpLM) / 2)
+		if lineno >= DB.nodeNoToLineno[DB.pathKeylookup[hashno][LowLM]] && lineno < DB.nodeNoToLineno[DB.pathKeylookup[hashno][MidLM]] {
+			if DB.nodeNoToLineno[DB.pathKeylookup[hashno][LowLM]] == DB.nodeNoToLineno[DB.pathKeylookup[hashno][MidLM]] {
+				LowLM = MidLM
+			} else {
+				UpLM = MidLM
+			}
+
+		} else if lineno >= DB.nodeNoToLineno[DB.pathKeylookup[hashno][MidLM]] && lineno <= DB.nodeNoToLineno[DB.pathKeylookup[hashno][UpLM]] {
+			if DB.nodeNoToLineno[DB.pathKeylookup[hashno][UpLM]] == DB.nodeNoToLineno[DB.pathKeylookup[hashno][MidLM]] {
+				UpLM = MidLM
+			} else {
+				LowLM = MidLM
+			}
+
+		} else {
+			break
+		}
+		//fmt.Printf("\n%d  %d  %d", UpLM, MidLM, LowLM)
+		if UpLM == LowLM || UpLM == (LowLM+1) {
+			index = UpLM
+			break
+		}
+
+	}
+	if index < 0 {
+		if lineno < DB.nodeNoToLineno[DB.pathKeylookup[hashno][0]] {
+			index = 0
+		} else {
+			DB.pathKeylookup[hashno] = append(DB.pathKeylookup[hashno], nodeId)
+			//fmt.Printf("\ninsertid_intohashtable")
+			//fmt.Println(DB.pathKeylookup[hashno])
+			return
+		}
+
+	}
+	DB.pathKeylookup[hashno] = append(DB.pathKeylookup[hashno][:index+1], DB.pathKeylookup[hashno][index:]...) // index < len(a)
+	DB.pathKeylookup[hashno][index] = nodeId
+	//fmt.Printf("\ninsertid_intohashtable-%d", index)
+	//fmt.Println(DB.pathKeylookup[hashno])
+	return
+}
 func remove_string(a []string, index int) []string {
 	if len(a) == index { // nil or empty slice or after last element
 		return a[:index]
@@ -298,13 +468,12 @@ func update_path(DB *Database, line string, path string, nodeId int) string {
 			DB.Nodeendlookup[nodeId] = nodeId
 			//fmt.Printf(" nodeid-%d  endid- %d\n", nodeId, nodeId)
 			lastattribremoved = false
-
-			DB.pathKeylookup[Node_hash] = append(DB.pathKeylookup[Node_hash], nodeId)
+			insertid_intohashtable(DB, Node_hash, nodeId)
 
 		} else if Node[0:1] == "<" {
 			/*add*/
 			path = path + "/" + NodeName
-			DB.pathKeylookup[Node_hash] = append(DB.pathKeylookup[Node_hash], nodeId)
+			insertid_intohashtable(DB, Node_hash, nodeId)
 			if strings.Contains(line, "</"+NodeName+">") {
 				DB.removeattribute = NodeName
 				DB.Nodeendlookup[nodeId] = nodeId
@@ -482,10 +651,11 @@ func Save_DB(DB *Database) {
 }
 
 func Load_dbcontent(DB *Database, content []string) {
-	susplock = false
+	DB.susplock = false
 	DB.global_dbLines = splitxmlinLines(content)
 	DB.global_lineLastUniqueid = 0
 	DB.removeattribute = ""
+	DB.reference_linenotoinsert = 0
 	if DB.Debug_enabled {
 		fmt.Printf("load_db :formating over\n")
 	}
@@ -499,6 +669,7 @@ func Load_dbcontent(DB *Database, content []string) {
 			DB.global_attributes = append(DB.global_attributes, "")
 			continue
 		}
+		DB.nodeNoToLineno[DB.global_lineLastUniqueid] = 0 //temporary will be overwritten later
 		path = update_path(DB, line, path, DB.global_lineLastUniqueid)
 		//fmt.Printf("\npath-%s", path)
 		Value := ""
@@ -676,6 +847,10 @@ func RemoveNode(DB *Database, nodeId int) []int {
 	end := NodeEnd(DB, nodeId)
 	var removedids []int
 	for i := startindex; i < end; i++ {
+		path := DB.global_paths[startindex]
+		path_parts := strings.Split(path, "/")
+		hashno := stringtono(path_parts[len(path_parts)-1])
+		removeid_fromhashtable(DB, hashno, DB.global_ids[startindex])
 		DB.global_dbLines = remove_string(DB.global_dbLines, startindex)
 		DB.deleted_ids = append(DB.deleted_ids, DB.global_ids[startindex])
 		removedids = append(removedids, DB.global_ids[startindex])
@@ -691,6 +866,7 @@ func insertAtLine(DB *Database, lineno int, sub_xml string, retainid int) []int 
 	DB.removeattribute = ""
 	DB.pathIdStack = DB.pathIdStack[:0]
 	var nodes []int
+	DB.reference_linenotoinsert = lineno - 1
 	startindex := lineno
 	startindex_tmp := lineno
 	path := DB.global_paths[lineno]
@@ -717,7 +893,7 @@ func insertAtLine(DB *Database, lineno int, sub_xml string, retainid int) []int 
 				}
 			}
 		}
-
+		DB.nodeNoToLineno[unique_id] = DB.reference_linenotoinsert //temporary will be overwritten later
 		path = update_path(DB, line, path, unique_id)
 		if DB.Debug_enabled {
 			fmt.Printf("insertatline :Inserting %s  %s\n", line, path)
@@ -810,14 +986,14 @@ func LocateRequireParentdNode(DB *Database, parent_nodeLine int, RequiredPath st
 	}
 	ParentPath := DB.global_paths[parent_nodeLine]
 
-	Total := suspectedLinenos(DB, RequiredPath)
+	Total := suspectedLinenos(DB, RequiredPath, parent_nodeLine, LineNo_inp+1)
 	if DB.Debug_enabled {
 		fmt.Printf("#####LocateRequireParentdNode###\n ")
 		fmt.Printf("ParentPath- %s\n", ParentPath)
 		fmt.Printf("LineNo %d\n", LineNo_inp)
 		fmt.Printf("RequiredPath %s\n", RequiredPath)
 		fmt.Printf("parent_nodeLine %d\n", parent_nodeLine)
-		fmt.Printf("No of Suspected lines-%d\n", len(suspectedLineStarts))
+		fmt.Printf("No of Suspected lines-%d\n", len(DB.suspectedLineStarts))
 	}
 
 	//locate line just above LineNo_inp
@@ -829,7 +1005,7 @@ func LocateRequireParentdNode(DB *Database, parent_nodeLine int, RequiredPath st
 			break
 		}
 
-		start := suspectedLineStarts[i]
+		start := DB.suspectedLineStarts[i]
 		if start >= parent_nodeLine && start <= LineNo_inp {
 			if start > requiredline {
 				requiredline = start
@@ -837,7 +1013,7 @@ func LocateRequireParentdNode(DB *Database, parent_nodeLine int, RequiredPath st
 		}
 		i++
 	}
-	susplock = false
+	DB.susplock = false
 	if len(DB.global_paths[requiredline]) >= len(ParentPath) {
 
 		_, _, stat := compare_path(DB.global_paths[requiredline], RequiredPath)
@@ -890,7 +1066,7 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 
 	}
 
-	Total := suspectedLinenos(DB, QueryPath)
+	Total := suspectedLinenos(DB, QueryPath, parent_nodeLine, parent_endline)
 
 	//fmt.Printf("\nlen(start) %d QueryPath %s\n", len(Starts), QueryPath)
 	index := 0
@@ -899,12 +1075,12 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 			break
 		}
 
-		start := suspectedLineStarts[index]
+		start := DB.suspectedLineStarts[index]
 		//fmt.Printf("\nstart %d end %d\n", start, Ends[index])
 		if start >= parent_nodeLine && start <= parent_endline {
 			LineNo := start
 
-			for InsideParent && LineNo < len(DB.global_paths) && LineNo <= suspectedLineEnds[index] {
+			for InsideParent && LineNo < len(DB.global_dbLines) && LineNo <= DB.suspectedLineEnds[index] {
 
 				if isParentPath(ParentPath, DB.global_paths[LineNo]) {
 
@@ -989,7 +1165,7 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 		}
 		index++
 	}
-	susplock = false
+	DB.susplock = false
 	if DB.Debug_enabled {
 		fmt.Printf("===LocateNode===\n")
 	}
