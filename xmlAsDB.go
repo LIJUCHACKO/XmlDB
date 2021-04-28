@@ -460,6 +460,16 @@ func update_path(DB *Database, line string, path string, nodeId int) string {
 				DB.pathIdStack = DB.pathIdStack[0 : len_DB_pathIdStack-1]
 			}
 
+		} else if Node[0:2] == "<!" {
+
+			/*add*/
+			path = path + "/!COMMENT!"
+			DB.removeattribute = "!COMMENT!"
+			DB.Nodeendlookup[nodeId] = nodeId
+			//fmt.Printf(" nodeid-%d  endid- %d\n", nodeId, nodeId)
+			lastattribremoved = false
+			insertid_intohashtable(DB, Node_hash, nodeId)
+
 		} else if Node[0:1] == "<" && Node[len(Node)-1:] == "/" {
 
 			/*add*/
@@ -521,6 +531,8 @@ func formatxml(lines []string) []string {
 		} else if line[0:1] == "<" && strings.Contains(line, "</") {
 			level--
 		} else if line[len(line)-2:] == "/>" {
+			level--
+		} else if line[0:2] == "<!" {
 			level--
 		}
 	}
