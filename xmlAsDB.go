@@ -1193,21 +1193,7 @@ func ParentNode(DB *Database, nodeId int) int {
 	parts := strings.Split(NodePath, "/")
 
 	RequiredPath := NodePath[0 : len(NodePath)-len(parts[len(parts)-1])-1]
-	//Search 'required node' backward
-	InsideParent := true
-	for InsideParent {
-		if isParentPath(RequiredPath, DB.global_paths[LineNo]) {
-			if DB.global_paths[LineNo] == RequiredPath {
-				ResultId = DB.global_ids[LineNo]
-				return ResultId
-			}
-		} else {
-			InsideParent = false
-
-		}
-		LineNo--
-	}
-	return ResultId
+	return LocateRequireParentdNode(DB, 0, RequiredPath, LineNo)
 }
 
 func ChildNodes(DB *Database, nodeId int) []int {
