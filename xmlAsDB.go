@@ -8,10 +8,10 @@ import (
 	"strings"
 )
 
-const MaxInt = 483647
+const MaxInt = 9999999
 
 // writeLines writes the lines to the given file.
-func writeLines(lines []string, path string) error {
+func writeLines(DB *Database, path string) error {
 	file, err := os.Create(path)
 	if err != nil {
 		return err
@@ -19,7 +19,7 @@ func writeLines(lines []string, path string) error {
 	defer file.Close()
 
 	w := bufio.NewWriter(file)
-	for _, line := range lines {
+	for _, line := range DB.global_dbLines {
 		line = strings.ReplaceAll(line, "<nil:node>", "")
 		line = strings.ReplaceAll(line, "</nil:node>", "")
 		fmt.Fprintln(w, line+"\r")
@@ -548,6 +548,7 @@ func splitxmlinLines(lines []string) []string {
 
 			for i, part := range parts {
 				part = strings.TrimSpace(part)
+				//fmt.Println(part)
 				if len(strings.TrimSpace(part)) > 0 {
 					if i < len(parts)-1 {
 						if strings.TrimSpace(part)[0:1] == "<" {
@@ -557,7 +558,14 @@ func splitxmlinLines(lines []string) []string {
 							newline = part + ">"
 
 						} else {
-							if newline[len(newline)-2:] == "/>" || strings.Contains(newline, "</") {
+							//fmt.Printf("\n%s-%d", newline, len(newline))
+							condition := false
+							if len(newline) > 2 {
+								if newline[len(newline)-2:] == "/>" || strings.Contains(newline, "</") {
+									condition = true
+								}
+							}
+							if condition {
 								//<a>b</a>  or <a/>
 
 								if len(newline) > 0 {
@@ -642,8 +650,8 @@ func NodeEnd(DB *Database, nodeId int) int {
 
 }
 func SaveAs_DB(DB *Database, filename string) {
-	lines := formatxml(DB.global_dbLines)
-	err := writeLines(lines, filename)
+	//lines := formatxml(DB.global_dbLines)
+	err := writeLines(DB, filename)
 	if err != nil {
 		fmt.Printf("Cannot save db  : %s\n", err)
 
@@ -654,8 +662,8 @@ func Save_DB(DB *Database) {
 		fmt.Printf("Filename not specified\n")
 		return
 	}
-	lines := formatxml(DB.global_dbLines)
-	err := writeLines(lines, DB.filename)
+	//lines := formatxml(DB.global_dbLines)
+	err := writeLines(DB, DB.filename)
 	if err != nil {
 		fmt.Printf("Cannot save db  : %s\n", err)
 
@@ -663,6 +671,12 @@ func Save_DB(DB *Database) {
 }
 
 func Load_dbcontent(DB *Database, content []string) {
+	DB.global_ids = make([]int, 0, MaxInt)
+	DB.global_paths = make([]string, 0, MaxInt)
+	DB.global_attributes = make([]string, 0, MaxInt)
+	DB.global_values = make([]string, 0, MaxInt)
+	DB.global_dbLines = make([]string, 0, MaxInt)
+
 	DB.susplock = false
 	DB.global_dbLines = splitxmlinLines(content)
 	DB.global_lineLastUniqueid = 0
@@ -752,11 +766,11 @@ func GetNodeAttribute(DB *Database, nodeId int, label string) string {
 	}
 	attributes := strings.Split(DB.global_attributes[LineNo], "||")
 	for _, attri := range attributes {
-
+		attri := strings.TrimSpace(attri)
 		LabelValue := strings.Split(attri, "=\"")
 		if len(LabelValue) >= 2 {
 			if LabelValue[0] == label {
-				Value := strings.TrimSpace(LabelValue[1])
+				Value := LabelValue[1]
 				//removing end quotes
 				//fmt.Printf("Value %s\n", Value)
 
@@ -791,8 +805,22 @@ func UpdateNodevalue(DB *Database, nodeId int, new_value string) []int {
 		return []int{}
 	}
 	value := GetNodeValue(DB, nodeId)
-	content = strings.ReplaceAll(content, ">"+value+"<", ">"+strings.TrimSpace(new_value)+"<")
-	replacednodes := replaceNodeRetainid(DB, nodeId, content)
+	result := ""
+	if len(value) == 0 {
+		if strings.Contains(content, "/>") {
+			result = content[0:len(content)-2] + ">" + new_value + "<" + GetNodeName(DB, nodeId) + "/>"
+
+		}
+	} else {
+		parts := strings.Split(content, ">")
+		if len(parts) > 1 {
+			part1 := parts[1]
+			part1parts := strings.Split(part1, "<")
+			result = parts[0] + ">" + new_value + "<" + part1parts[1] + "/>"
+		}
+	}
+	fmt.Printf("\n new content %s\n", result)
+	replacednodes := replaceNodeRetainid(DB, nodeId, result)
 	if DB.Debug_enabled {
 		fmt.Printf("UpdateNodevalue :Updating node %d\n", nodeId)
 		fmt.Printf("%s\n", GetNodeContents(DB, nodeId))
@@ -840,15 +868,24 @@ func GetNodeContents(DB *Database, nodeId int) string {
 	if DB.Debug_enabled {
 		fmt.Printf("getNodeContents :Fetching Contents from line %d to %d \n", beginning, end)
 	}
+	var lines []string
+	if (end - beginning) > 200 {
+		fmt.Printf("\n No of lines more than 200 \n ")
+		lines = DB.global_dbLines[beginning : beginning+200]
+	} else {
+		lines = DB.global_dbLines[beginning:end]
+	}
 
-	lines := DB.global_dbLines[beginning:end]
 	lines = formatxml(lines)
+
 	for _, line := range lines {
 		//line = strings.ReplaceAll(line, "<nil:node>", "")
 		//line = strings.ReplaceAll(line, "</nil:node>", "")
 		Output = Output + line + "\n"
 	}
-
+	if (end - beginning) > 200 {
+		Output = Output + "\n .....Remaining lines are not printed......\n "
+	}
 	return Output
 }
 func RemoveNode(DB *Database, nodeId int) []int {
@@ -881,11 +918,13 @@ func insertAtLine(DB *Database, lineno int, sub_xml string, retainid int) []int 
 	DB.reference_linenotoinsert = lineno - 1
 	startindex := lineno
 	startindex_tmp := lineno
-	path := DB.global_paths[lineno]
-	if strings.Contains(DB.global_dbLines[lineno], "</") || strings.Contains(DB.global_dbLines[lineno], "/>") {
+	path := DB.global_paths[lineno-1]
+	//fmt.Printf("\n path previous-%s, line-%s", path, DB.global_dbLines[lineno-1])
+	if strings.Contains(DB.global_dbLines[lineno-1], "</") || strings.Contains(DB.global_dbLines[lineno-1], "/>") || strings.Contains(DB.global_dbLines[lineno-1], "->") {
 		path_parts := strings.Split(path, "/")
 		path = path[0 : len(path)-len(path_parts[len(path_parts)-1])-1]
 	}
+	//fmt.Printf("\n path previous-%s", path)
 	newlines := strings.Split(sub_xml, "\n")
 	additional_lines := splitxmlinLines(newlines)
 	first := true
@@ -907,6 +946,7 @@ func insertAtLine(DB *Database, lineno int, sub_xml string, retainid int) []int 
 		}
 		DB.nodeNoToLineno[unique_id] = DB.reference_linenotoinsert //temporary will be overwritten later
 		path = update_path(DB, line, path, unique_id)
+		//fmt.Printf("\nline-%s, path-%s", line, path)
 		if DB.Debug_enabled {
 			fmt.Printf("insertatline :Inserting %s  %s\n", line, path)
 		}
@@ -983,11 +1023,19 @@ func replaceNodeRetainid(DB *Database, nodeId int, sub_xml string) []int {
 }
 func AppendAfterNode(DB *Database, nodeId int, sub_xml string) []int {
 	end := NodeEnd(DB, nodeId)
+	if end < 0 {
+		fmt.Printf("Warning :node  doesnot exist\n")
+		return []int{}
+	}
 	nodes := insertAtLine(DB, end, sub_xml, -1)
 	return nodes
 }
 func AppendBeforeNode(DB *Database, nodeId int, sub_xml string) []int {
 	start := NodeLine(DB, nodeId)
+	if start < 0 {
+		fmt.Printf("Warning :node  doesnot exist\n")
+		return []int{}
+	}
 	nodes := insertAtLine(DB, start, sub_xml, -1)
 	return nodes
 }
@@ -1208,6 +1256,7 @@ func ChildNodes(DB *Database, nodeId int) []int {
 	InsideParent := true
 	LineNo++
 	for InsideParent && LineNo < Node_end {
+		//fmt.Printf("\npath-%s ", DB.global_paths[LineNo])
 		if isParentPath(NodePath, DB.global_paths[LineNo]) {
 			if DB.global_paths[LineNo][len(DB.global_paths[LineNo])-2:] == "/~" {
 
