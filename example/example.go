@@ -35,7 +35,22 @@ func main() {
 	for _, node := range identifiedNodes {
 		fmt.Printf("\n%s", xmlDB.GetNodeContents(DB, node))
 	}
-	fmt.Printf("\n### Updating node value##\n")
+
+	fmt.Printf("\n### Updating node value ##\n")
+	identifiedNodes, _ = xmlDB.GetNode(DB, 0, "head/title")
+
+	for _, node := range identifiedNodes {
+		xmlDB.UpdateNodevalue(DB, node, "test_new")
+		fmt.Printf("After updating value\n")
+		fmt.Printf("\n%s", xmlDB.GetNodeContents(DB, node))
+	}
+	identifiedNodes, _ = xmlDB.GetNode(DB, 0, "head")
+	ids := xmlDB.ChildNodes(DB, identifiedNodes[0])
+	fmt.Printf("\nchildren")
+	for _, id := range ids {
+		fmt.Printf("\n%s", xmlDB.GetNodeContents(DB, id))
+	}
+	fmt.Printf("\n### Updating node ##\n")
 	identifiedNodes, _ = xmlDB.GetNode(DB, 0, "head/title")
 	for _, node := range identifiedNodes {
 		newnodes := xmlDB.ReplaceNode(DB, node, "<title>test</title>")
@@ -43,6 +58,7 @@ func main() {
 		fmt.Printf("old node value- %s", xmlDB.GetNodeValue(DB, node)) //no output, existing id is removed and new id added
 		fmt.Printf("\nnew node value- %s", xmlDB.GetNodeValue(DB, newnodes[0]))
 	}
+
 	fmt.Printf("\n### Updating node attribute##\n")
 	identifiedNodes, _ = xmlDB.GetNode(DB, 0, "<x>*[style=\"123\"]/h1")
 	for _, node := range identifiedNodes {
