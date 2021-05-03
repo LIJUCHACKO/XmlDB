@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-const MaxInt = 9999999
+//const maxInt = 9999999
 
 // writeLines writes the lines to the given file.
 func writeLines(DB *Database, path string) error {
@@ -27,19 +27,20 @@ func writeLines(DB *Database, path string) error {
 	return w.Flush()
 }
 
-func readLines(path string) ([]string, error) {
+func readLines(path string) (string, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	defer file.Close()
 
-	var lines []string
+	var content strings.Builder
+
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
+		content.WriteString(scanner.Text())
 	}
-	return lines, scanner.Err()
+	return content.String(), scanner.Err()
 }
 
 type Database struct {
@@ -53,14 +54,20 @@ type Database struct {
 	global_attributes        []string
 	global_lineLastUniqueid  int
 	Debug_enabled            bool
-	nodeNoToLineno           [MaxInt]int
-	pathKeylookup            [MaxInt][]int
-	Nodeendlookup            [MaxInt]int
-	pathIdStack              []int
-	suspectedLineStarts      [MaxInt / 2]int
-	suspectedLineEnds        [MaxInt / 2]int
+	nodeNoToLineno           []int
+	pathKeylookup            [][]int
+	Nodeendlookup            []int
+	suspectedLineStarts      []int
+	suspectedLineEnds        []int
+	pathIdStack              [2000]int
+	pathIdStack_index        int
 	susplock                 bool
 	reference_linenotoinsert int
+	retainid                 int
+	startindex               int
+	path                     string
+	MaxNooflines             int
+	maxInt                   int
 }
 
 func updateNodenoLineMap(DB *Database, fromLine int) {
@@ -77,13 +84,13 @@ func updateNodenoLineMap(DB *Database, fromLine int) {
 		lineno++
 	}
 }
-func stringtono(line string) int {
+func stringtono(DB *Database, line string) int {
 	total := 0
 	for i, ch := range line {
 		total = total + int(ch)*i
 	}
-	if total > MaxInt {
-		total = total - MaxInt
+	if total > DB.maxInt {
+		total = total - DB.maxInt
 	}
 	return total
 }
@@ -103,13 +110,13 @@ func suspectedLinenos(DB *Database, path string, lowerbound int, upperbound int)
 			break
 		}
 		part := pathParts[index]
-		//fmt.Printf("\nkeypart %s", part)
+		//fmt.Printf("\n%s keypart %s", path, part)
 		if strings.Contains(part, "<") || strings.Contains(part, "..") {
 
 			SearchtillEnd = 1
 
 		} else {
-			hashno := stringtono(part)
+			hashno := stringtono(DB, part)
 			from := find_indexhashtable(DB, hashno, lowerbound, false)
 			to := find_indexhashtable(DB, hashno, upperbound, true)
 			NodeNos = DB.pathKeylookup[hashno][from:to]
@@ -117,7 +124,8 @@ func suspectedLinenos(DB *Database, path string, lowerbound int, upperbound int)
 		}
 		index--
 	}
-
+	//fmt.Printf("\nNodeNos ")
+	//fmt.Println(NodeNos)
 	if len(NodeNos) == 0 {
 		DB.suspectedLineStarts[0] = 0
 		DB.suspectedLineEnds[0] = len(DB.global_dbLines)
@@ -127,8 +135,10 @@ func suspectedLinenos(DB *Database, path string, lowerbound int, upperbound int)
 		for i, node := range NodeNos {
 
 			DB.suspectedLineStarts[i] = DB.nodeNoToLineno[node]
+			//fmt.Printf("\n DB.nodeNoToLineno[node] %d ", DB.nodeNoToLineno[node])
 			if SearchtillEnd == 1 {
 				DB.suspectedLineEnds[i] = DB.nodeNoToLineno[DB.Nodeendlookup[node]] + 1
+				//fmt.Printf("\n DB.suspectedLineEnds[i] %d ", DB.suspectedLineEnds[i])
 			} else {
 				DB.suspectedLineEnds[i] = DB.nodeNoToLineno[node]
 			}
@@ -224,10 +234,6 @@ func remove(a []int, index int) []int {
 }
 
 func removeid_fromhashtable(DB *Database, hashno int, nodeId int) {
-
-	//fmt.Printf("\nremoveid_fromhashtable-entry")
-	//fmt.Println(nodeId)
-	//fmt.Println(DB.pathKeylookup[hashno])
 	lineno := DB.nodeNoToLineno[nodeId]
 	LowLM := 0
 	UpLM := len(DB.pathKeylookup[hashno]) - 1
@@ -240,7 +246,6 @@ func removeid_fromhashtable(DB *Database, hashno int, nodeId int) {
 		} else if lineno > DB.nodeNoToLineno[DB.pathKeylookup[hashno][MidLM]] && lineno <= DB.nodeNoToLineno[DB.pathKeylookup[hashno][UpLM]] {
 			LowLM = MidLM
 		} else {
-			//fmt.Printf("\nbreak1")
 			break
 		}
 		//fmt.Printf("\n%d  %d  %d", UpLM, MidLM, LowLM)
@@ -414,93 +419,7 @@ func insert_string(a []string, index int, value string) []string {
 	a[index] = value
 	return a
 }
-func update_path(DB *Database, line string, path string, nodeId int) string {
 
-	if len(path) > 3 {
-		if path[len(path)-2:len(path)] == "/~" {
-			path = path[0 : len(path)-2]
-			DB.removeattribute = ""
-		}
-	}
-	lastattribremoved := false
-	line = strings.TrimSpace(line)
-	Node := ""
-	NodeName := ""
-	parts := strings.Split(line, ">")
-	if len(parts) > 0 {
-		parts0 := parts[0]
-		parts0 = strings.TrimSpace(parts0)
-		Node = parts0
-		NodeName = strings.Split(parts0, " ")[0]
-
-	}
-
-	NodeName = strings.Replace(NodeName, "</", "", -1)
-	NodeName = strings.Replace(NodeName, "<", "", -1)
-	NodeName = strings.Replace(NodeName, "/>", "", -1)
-	NodeName = strings.Replace(NodeName, ">", "", -1)
-	NodeName = strings.Replace(NodeName, "/", "", -1)
-
-	if len(DB.removeattribute) > 0 {
-		if path[len(path)-len(DB.removeattribute):] == DB.removeattribute {
-			path = path[0 : len(path)-len(DB.removeattribute)-1]
-			DB.removeattribute = ""
-		}
-	}
-	Node_hash := stringtono(NodeName)
-	if len(Node) > 1 {
-		if Node[0:2] == "</" {
-			/*remove*/
-			if path[len(path)-len(NodeName):] == NodeName {
-				path = path[0 : len(path)-len(NodeName)-1]
-				lastattribremoved = true
-				len_DB_pathIdStack := len(DB.pathIdStack)
-				//fmt.Printf(" nodeid-%d  endid- %d\n", DB.pathIdStack[len_DB_pathIdStack-1], nodeId)
-				DB.Nodeendlookup[DB.pathIdStack[len_DB_pathIdStack-1]] = nodeId
-				DB.pathIdStack = DB.pathIdStack[0 : len_DB_pathIdStack-1]
-			}
-
-		} else if Node[0:2] == "<!" {
-
-			/*add*/
-			path = path + "/!COMMENT!"
-			DB.removeattribute = "!COMMENT!"
-			DB.Nodeendlookup[nodeId] = nodeId
-			//fmt.Printf(" nodeid-%d  endid- %d\n", nodeId, nodeId)
-			lastattribremoved = false
-			insertid_intohashtable(DB, Node_hash, nodeId)
-
-		} else if Node[0:1] == "<" && Node[len(Node)-1:] == "/" {
-
-			/*add*/
-			path = path + "/" + NodeName
-			DB.removeattribute = NodeName
-			DB.Nodeendlookup[nodeId] = nodeId
-			//fmt.Printf(" nodeid-%d  endid- %d\n", nodeId, nodeId)
-			lastattribremoved = false
-			insertid_intohashtable(DB, Node_hash, nodeId)
-
-		} else if Node[0:1] == "<" {
-			/*add*/
-			path = path + "/" + NodeName
-			insertid_intohashtable(DB, Node_hash, nodeId)
-			if strings.Contains(line, "</"+NodeName+">") {
-				DB.removeattribute = NodeName
-				DB.Nodeendlookup[nodeId] = nodeId
-				//fmt.Printf(" nodeid-%d  endid- %d\n", nodeId, nodeId)
-			} else {
-				DB.pathIdStack = append(DB.pathIdStack, nodeId)
-			}
-
-			lastattribremoved = false
-		}
-	}
-	if lastattribremoved {
-		path = path + "/~"
-	}
-	//fmt.Printf(" path- %s  line-%s \n", path, line)
-	return path
-}
 func formatxml(lines []string) []string {
 	newlines := []string{}
 	level := 0
@@ -538,89 +457,347 @@ func formatxml(lines []string) []string {
 	}
 	return newlines
 }
-func splitxmlinLines(lines []string) []string {
-	newlines := []string{}
-	newline := ""
-	for _, line := range lines {
-		if len(strings.TrimSpace(line)) > 0 {
+func fill_DBdata(DB *Database, dbline string, value string, attribute string, NodeName string, mode int) int {
+	
+	DB.path = update_path(DB, NodeName, mode, DB.path)
+	if NodeName[0] == '!' && DB.global_lineLastUniqueid == 0 {
+		DB.global_lineLastUniqueid = -1
+	}
+	unique_id := DB.global_lineLastUniqueid
+	if DB.startindex < 0 {
+		//fmt.Printf("\n%s %s %d %s %s", DB.path, dbline, unique_id, value, attribute)
+		DB.global_dbLines = append(DB.global_dbLines, dbline)
+		DB.global_values = append(DB.global_values, value)
+		DB.global_attributes = append(DB.global_attributes, attribute)
+		DB.global_paths = append(DB.global_paths, DB.path)
+		DB.global_ids = append(DB.global_ids, unique_id)
 
-			parts := strings.Split(line, ">")
+		DB.global_lineLastUniqueid++
+		if DB.global_lineLastUniqueid >= DB.maxInt {
+			fmt.Printf("load_db: Total no. of Uniqueid>= DB.MaxNooflines, Please increase DB.MaxNooflines before loading db")
+			os.Exit(1)
+		}
+	} else {
 
-			for i, part := range parts {
-				part = strings.TrimSpace(part)
-				//fmt.Println(part)
-				if len(strings.TrimSpace(part)) > 0 {
-					if i < len(parts)-1 {
-						if strings.TrimSpace(part)[0:1] == "<" {
-							if len(newline) > 0 {
-								newlines = append(newlines, newline)
-							}
-							newline = part + ">"
-
-						} else {
-							//fmt.Printf("\n%s-%d", newline, len(newline))
-							condition := false
-							if len(newline) > 2 {
-								if newline[len(newline)-2:] == "/>" || strings.Contains(newline, "</") {
-									condition = true
-								}
-							}
-							if condition {
-								//<a>b</a>  or <a/>
-
-								if len(newline) > 0 {
-									newlines = append(newlines, newline)
-								}
-								subparts := strings.Split(part, "<")
-								if len(subparts) == 2 {
-									newlines = append(newlines, "<nil:node>"+subparts[0]+"</nil:node>")
-									newline = "<" + subparts[1] + ">"
-								}
-							} else {
-								//<a>b<c>jhj</c>
-								subparts := strings.Split(part, "<")
-								if subparts[1][0:1] == "/" {
-									newline = newline + part + ">"
-								} else {
-									if len(newline) > 0 {
-										newlines = append(newlines, newline)
-									}
-									newlines = append(newlines, "<nil:node>"+subparts[0]+"</nil:node>")
-									newline = "<" + subparts[1] + ">"
-								}
-
-							}
-
-						}
-
-					} else if i == len(parts)-1 {
-
-						if strings.TrimSpace(part)[0:1] == "<" {
-							if len(newline) > 0 {
-								newlines = append(newlines, newline)
-							}
-							newline = part
-						} else {
-							if len(newline) > 0 {
-								newlines = append(newlines, newline)
-							}
-							newlines = append(newlines, "<nil:node>"+part+"</nil:node>")
-							newline = ""
-						}
-
-					}
+		if DB.retainid > 0 {
+			unique_id = DB.retainid
+			DB.retainid = -1
+		} else {
+			if DB.global_lineLastUniqueid >= DB.maxInt {
+				if len(DB.deleted_ids) > 0 {
+					unique_id = DB.deleted_ids[0]
+					DB.deleted_ids = DB.deleted_ids[1:]
+				} else {
+					fmt.Printf("InsertAtLine: Total no. of Uniqueid>= DB.maxInt, Please increase DB.maxInt")
+					os.Exit(1)
 				}
 			}
-			if len(newline) > 0 {
-				newlines = append(newlines, newline)
-				newline = ""
+		}
+		DB.global_dbLines = insert_string(DB.global_dbLines, DB.startindex, dbline)
+		DB.global_values = insert_string(DB.global_values, DB.startindex, value)
+		DB.global_attributes = insert_string(DB.global_attributes, DB.startindex, attribute)
+		DB.global_ids = insert(DB.global_ids, DB.startindex, unique_id)
+		DB.global_paths = insert_string(DB.global_paths, DB.startindex, DB.path)
+		if DB.Debug_enabled {
+			fmt.Printf("insertatline :Inserting New Node %d\n", unique_id)
+		}
+		DB.startindex++
+		if DB.global_lineLastUniqueid < DB.maxInt && unique_id == DB.global_lineLastUniqueid {
+			DB.global_lineLastUniqueid++
+			if DB.global_lineLastUniqueid >= DB.maxInt {
+				fmt.Printf("load_db: Total no. of Uniqueid>= DB.MaxNooflines, Please increase DB.MaxNooflines before loading db")
+				os.Exit(1)
 			}
+		}
+	}
+	if unique_id >= 0 {
+		if mode < 3 {
+			Node_hash := stringtono(DB, NodeName)
+			insertid_intohashtable(DB, Node_hash, unique_id)
+		}
+		if mode == 1 {
+			DB.pathIdStack[DB.pathIdStack_index] = unique_id
+			DB.pathIdStack_index++
+		} else if mode == 2 {
+			DB.Nodeendlookup[unique_id] = unique_id
+		} else if mode == 3 {
+			DB.pathIdStack_index--
+			DB.Nodeendlookup[DB.pathIdStack[DB.pathIdStack_index]] = unique_id
 
 		}
-
+	}
+	//fmt.Printf("\n%s %d %d %d", DB.path, DB.pathIdStack_index, unique_id, mode)
+	return unique_id
+}
+func update_path(DB *Database, NodeName string, mode int, path string) string {
+	//fmt.Printf(" path- %s  line-%s mode-%d\n", path, NodeName, mode)
+	//1.Add 2.Add and Remove 3.Remove
+	if len(path) > 3 {
+		if path[len(path)-2:len(path)] == "/~" {
+			path = path[0 : len(path)-2]
+			//removeattribute = ""
+		}
 	}
 
-	return newlines
+	if len(DB.removeattribute) > 0 {
+		if path[len(path)-len(DB.removeattribute):] == DB.removeattribute {
+			path = path[0 : len(path)-len(DB.removeattribute)-1]
+			DB.removeattribute = ""
+		}
+	}
+	if mode >= 2 {
+		DB.removeattribute = NodeName
+	}
+	if mode <= 2 {
+		path = path + "/" + NodeName
+	}
+
+	if mode == 3 {
+		//path = path[0 : len(path)-len(NodeName)-1]
+		path = path + "/~"
+	}
+	//fmt.Printf(" path- %s  line-%s \n", path, line)
+	return path
+}
+func splitXmlintoLines(DB *Database, content string) []int {
+
+	nodes := []int{}
+	var nodeStart strings.Builder
+	var attributebuffer strings.Builder
+	var valuebuffer strings.Builder
+	nodeEnded := false
+	CommentStarted := false
+	Comment2Started := false
+	xmldeclarationStarted := false
+	CDATAStarted := false
+	NodeName := ""
+	lastindex := 0
+	index := 0
+	for {
+		if content[index] == '<' {
+			if !CommentStarted && !CDATAStarted && !xmldeclarationStarted {
+				if content[index+1] != '/' {
+					if nodeStart.Len() > 0 {
+						//////
+						node := fill_DBdata(DB, nodeStart.String(), valuebuffer.String(), attributebuffer.String(), NodeName, 1)
+						if DB.startindex >= 0 {
+							nodes = append(nodes, node)
+						}
+						valuebuffer.Reset()
+						attributebuffer.Reset()
+						/////
+					}
+					nodeStart.Reset()
+					nodeStart.WriteString("<nil:node>")
+					nodeStart.WriteString(content[lastindex:index])
+					nodeStart.WriteString("</nil:node>")
+					if len(strings.TrimSpace(content[lastindex:index])) > 0 {
+						////
+						node := fill_DBdata(DB, nodeStart.String(), strings.TrimSpace(content[lastindex:index]), "", "nil:node", 2)
+						if DB.startindex >= 0 {
+							nodes = append(nodes, node)
+						}
+						////
+					}
+					nodeStart.Reset()
+					lastindex = index
+					nodeEnded = false
+				}
+				if content[index+1] == '!' {
+					//comparestringForward(line, "<![CDATA[")
+					nodeEnded = false
+					if content[index+2] == '[' {
+						lastindex = index
+						nodeStart.Reset()
+						CDATAStarted = true
+						lastindex = index
+					} else if content[index+2] == '-' {
+						CommentStarted = true
+						lastindex = index
+					} else {
+						Comment2Started = true
+						lastindex = index
+					}
+				} else if content[index+1] == '?' {
+					//comparestringForward(line, "<?")
+					nodeEnded = false
+					xmldeclarationStarted = true
+					lastindex = index
+				} else if content[index+1] == '/' {
+					//comparestringForward(line, "</")
+					nodeEnded = true
+					if nodeStart.Len() > 0 {
+						nodeStart.WriteString(content[lastindex:index])
+						valuebuffer.WriteString(strings.TrimSpace(content[lastindex:index]))
+						lastindex = index
+					} else {
+						nodeStart.WriteString("<nil:node>")
+						nodeStart.WriteString(content[lastindex:index])
+						nodeStart.WriteString("</nil:node>")
+						if len(strings.TrimSpace(content[lastindex:index])) > 0 {
+							////
+							node := fill_DBdata(DB, nodeStart.String(), strings.TrimSpace(content[lastindex:index]), "", "nil:node", 2)
+							if DB.startindex >= 0 {
+								nodes = append(nodes, node)
+							}
+							////
+						}
+						nodeStart.Reset()
+						lastindex = index
+					}
+				} else {
+
+				}
+			}
+		}
+		if content[index] == '>' {
+			if CommentStarted {
+				if content[index-1] == '-' {
+					//comparestringBackward(line, "->")
+					CommentStarted = false
+					buffer := content[lastindex : index+1]
+					lastindex = index + 1
+					if len(strings.TrimSpace(buffer)) > 0 {
+						////
+						node := fill_DBdata(DB, buffer, valuebuffer.String(), attributebuffer.String(), "!COMMENT!", 2)
+						if DB.startindex >= 0 {
+							nodes = append(nodes, node)
+						}
+						valuebuffer.Reset()
+						attributebuffer.Reset()
+						////
+					}
+				}
+			} else if CDATAStarted {
+				//comparestringBackward(line, "]]>")
+				if content[index-1] == ']' {
+					buffer := content[lastindex : index+1]
+					lastindex = index + 1
+					if len(strings.TrimSpace(buffer)) > 0 {
+						////
+						node := fill_DBdata(DB, buffer, valuebuffer.String(), attributebuffer.String(), "!CDATA!", 2)
+						if DB.startindex >= 0 {
+							nodes = append(nodes, node)
+						}
+						valuebuffer.Reset()
+						attributebuffer.Reset()
+						////
+					}
+					CDATAStarted = false
+				}
+			} else if xmldeclarationStarted {
+				//comparestringBackward(line, "?>"
+				if content[index-1] == '?' {
+					xmldeclarationStarted = false
+					buffer := content[lastindex : index+1]
+					lastindex = index + 1
+					if len(strings.TrimSpace(buffer)) > 0 {
+						////
+						node := fill_DBdata(DB, buffer, valuebuffer.String(), attributebuffer.String(), "!XMLDECL!", 2)
+						if DB.startindex >= 0 {
+							nodes = append(nodes, node)
+						}
+						valuebuffer.Reset()
+						attributebuffer.Reset()
+						////
+					}
+				}
+			} else if Comment2Started {
+				Comment2Started = false
+				buffer := content[lastindex : index+1]
+				lastindex = index + 1
+				if len(strings.TrimSpace(buffer)) > 0 {
+					///
+					node := fill_DBdata(DB, buffer, valuebuffer.String(), attributebuffer.String(), "!COMMENT2!", 2)
+					if DB.startindex >= 0 {
+						nodes = append(nodes, node)
+					}
+					valuebuffer.Reset()
+					attributebuffer.Reset()
+					////
+				}
+			} else {
+
+				//extract attribute
+				if content[index-1] == '/' {
+					//if comparestringBackward(line, "/>", index) {
+					nodeStart.WriteString(content[lastindex : index+1])
+					parts := strings.Split(strings.TrimSpace(content[lastindex+1:index-1]), " ")
+					for partind, part := range parts {
+						if partind > 0 {
+							if len(strings.TrimSpace(part)) > 0 {
+								if attributebuffer.Len() > 1 {
+									attributebuffer.WriteString("||")
+								}
+								attributebuffer.WriteString(strings.TrimSpace(part))
+							}
+						} else {
+							//path = update_pathsimple(DB, part, 2, path)
+						}
+					}
+					lastindex = index + 1
+					///
+					node := fill_DBdata(DB, nodeStart.String(), valuebuffer.String(), attributebuffer.String(), parts[0], 2)
+					if DB.startindex >= 0 {
+						nodes = append(nodes, node)
+					}
+					valuebuffer.Reset()
+					attributebuffer.Reset()
+					///
+					nodeStart.Reset()
+					nodeEnded = false
+
+				} else {
+					//} else if comparestringBackward(line, ">", index) {
+					if nodeEnded {
+						///
+						if nodeStart.Len() > 0 {
+							nodeStart.WriteString(content[lastindex : index+1])
+							node := fill_DBdata(DB, nodeStart.String(), valuebuffer.String(), attributebuffer.String(), strings.TrimSpace(content[lastindex+2:index]), 2)
+							if DB.startindex >= 0 {
+								nodes = append(nodes, node)
+							}
+						} else {
+							node := fill_DBdata(DB, content[lastindex:index+1], valuebuffer.String(), attributebuffer.String(), strings.TrimSpace(content[lastindex+2:index]), 3)
+							if DB.startindex >= 0 {
+								nodes = append(nodes, node)
+							}
+						}
+
+						////
+
+						valuebuffer.Reset()
+						attributebuffer.Reset()
+						nodeStart.Reset()
+						nodeEnded = false
+					} else {
+						nodeStart.WriteString(content[lastindex : index+1])
+						parts := strings.Split(strings.TrimSpace(content[lastindex+1:index]), " ")
+						for partind, part := range parts {
+							if partind > 0 {
+								if len(strings.TrimSpace(part)) > 0 {
+									if attributebuffer.Len() > 1 {
+										attributebuffer.WriteString("||")
+									}
+									attributebuffer.WriteString(strings.TrimSpace(part))
+								}
+							} else {
+								NodeName = part
+							}
+						}
+					}
+					lastindex = index + 1
+				}
+			}
+		}
+		index++
+		if index >= len(content) {
+			break
+		}
+	}
+
+	//fmt.Printf("\n %d  %d %d  %d", len(newlines), len(values), len(attributes), len(paths))
+	return nodes
 }
 
 func NodeLine(DB *Database, nodeId int) int {
@@ -669,84 +846,60 @@ func Save_DB(DB *Database) {
 
 	}
 }
-
-func Load_dbcontent(DB *Database, content []string) {
-	DB.global_ids = make([]int, 0, MaxInt)
-	DB.global_paths = make([]string, 0, MaxInt)
-	DB.global_attributes = make([]string, 0, MaxInt)
-	DB.global_values = make([]string, 0, MaxInt)
-	DB.global_dbLines = make([]string, 0, MaxInt)
-
-	DB.susplock = false
-	DB.global_dbLines = splitxmlinLines(content)
+func Load_dbcontent(DB *Database, xmllines []string) {
+	var contentByte strings.Builder
+	for _, line := range xmllines {
+		contentByte.WriteString(line)
+	}
+	load_xmlstring(DB, contentByte.String())
+}
+func load_xmlstring(DB *Database, content string) {
+	if DB.MaxNooflines < 99999 {
+		DB.MaxNooflines = 99999
+	}
+	DB.maxInt = DB.MaxNooflines
+	DB.nodeNoToLineno = make([]int, DB.maxInt)
+	DB.pathKeylookup = make([][]int, DB.maxInt)
+	DB.Nodeendlookup = make([]int, DB.maxInt)
+	DB.suspectedLineStarts = make([]int, DB.maxInt/2)
+	DB.suspectedLineEnds = make([]int, DB.maxInt/2)
+	DB.startindex = -1
+	DB.retainid = -1
+	DB.pathIdStack_index = 0
+	DB.global_ids = make([]int, 0, DB.maxInt)
+	DB.global_paths = make([]string, 0, DB.maxInt)
+	DB.global_attributes = make([]string, 0, DB.maxInt)
+	DB.global_values = make([]string, 0, DB.maxInt)
+	DB.global_dbLines = make([]string, 0, DB.maxInt)
 	DB.global_lineLastUniqueid = 0
 	DB.removeattribute = ""
 	DB.reference_linenotoinsert = 0
+	DB.susplock = false
+	DB.path = ""
+	splitXmlintoLines(DB, content)
+
 	if DB.Debug_enabled {
-		fmt.Printf("load_db :formating over\n")
+		fmt.Printf("load_db : over\n")
 	}
-	path := ""
 
-	for _, line := range DB.global_dbLines {
-		if strings.Contains(line, "<?xml") || strings.Contains(line, "<!DOCTYPE") {
-			DB.global_values = append(DB.global_values, "")
-			DB.global_ids = append(DB.global_ids, -1)
-			DB.global_paths = append(DB.global_paths, "")
-			DB.global_attributes = append(DB.global_attributes, "")
-			continue
-		}
-		DB.nodeNoToLineno[DB.global_lineLastUniqueid] = 0 //temporary will be overwritten later
-		path = update_path(DB, line, path, DB.global_lineLastUniqueid)
-		//fmt.Printf("\npath-%s", path)
-		Value := ""
-		parts := strings.Split(line, ">")
-		part0 := strings.TrimSpace(parts[0])
-		if part0[len(part0)-1:] == "/" {
-			part0 = part0[0 : len(part0)-1]
-		}
-		part0parts := strings.Split(part0, " ")
-		attribute := ""
-		if len(part0parts) > 1 {
-
-			ind := 0
-			for _, attribute_each := range part0parts {
-				if len(attribute_each) > 0 {
-					if ind > 0 {
-						attribute = attribute + "||" + strings.TrimSpace(attribute_each)
-					} else {
-						attribute = attribute
-					}
-					ind++
-				}
-
-			}
-
-		}
-		DB.global_attributes = append(DB.global_attributes, attribute)
-		part1 := strings.TrimSpace(parts[1])
-		if len(part1) > 0 {
-			if part1[0] == '<' {
-
-			} else {
-				parts2 := strings.Split(part1, "<")
-				Value = strings.TrimSpace(parts2[0])
-
-			}
-		}
-		DB.global_values = append(DB.global_values, Value)
-		DB.global_ids = append(DB.global_ids, DB.global_lineLastUniqueid)
-		DB.global_paths = append(DB.global_paths, path)
-		DB.global_lineLastUniqueid++
-		if DB.global_lineLastUniqueid >= MaxInt {
-			fmt.Printf("load_db: Total no. of Uniqueid>= MaxInt, Please increase MaxInt")
-			os.Exit(1)
-		}
-	}
 	updateNodenoLineMap(DB, 0)
-
+	//fmt.Println(DB.global_ids)
 	if DB.Debug_enabled {
 		fmt.Printf("load_db :xml db loaded\n No of nodes-%d\n", DB.global_lineLastUniqueid)
+
+		for i, line := range DB.global_dbLines {
+			nodeend := 0
+			nodebeg := 0
+			if DB.global_ids[i] >= 0 {
+				nodebeg = DB.nodeNoToLineno[DB.global_ids[i]]
+				nodeend = DB.nodeNoToLineno[DB.Nodeendlookup[DB.global_ids[i]]] + 1
+			}
+
+			fmt.Printf("\n path- %s  line- %s  nodeid-%d nodebeg-%d nodeend-%d", DB.global_paths[i], line, DB.global_ids[i], nodebeg, nodeend)
+			fmt.Printf("\n value- %s attribute-%s", DB.global_values[i], DB.global_attributes[i])
+		}
 	}
+
 }
 func Load_db(DB *Database, filename string) {
 	DB.filename = filename
@@ -755,7 +908,7 @@ func Load_db(DB *Database, filename string) {
 		fmt.Printf("Cannot load_db :Read : %s\n", err)
 
 	}
-	Load_dbcontent(DB, lines)
+	load_xmlstring(DB, lines)
 }
 
 func GetNodeAttribute(DB *Database, nodeId int, label string) string {
@@ -808,7 +961,7 @@ func UpdateNodevalue(DB *Database, nodeId int, new_value string) []int {
 	result := ""
 	if len(value) == 0 {
 		if strings.Contains(content, "/>") {
-			result = content[0:len(content)-2] + ">" + new_value + "<" + GetNodeName(DB, nodeId) + "/>"
+			result = content[0:len(content)-3] + ">" + new_value + "</" + GetNodeName(DB, nodeId) + ">"
 
 		}
 	} else {
@@ -816,10 +969,10 @@ func UpdateNodevalue(DB *Database, nodeId int, new_value string) []int {
 		if len(parts) > 1 {
 			part1 := parts[1]
 			part1parts := strings.Split(part1, "<")
-			result = parts[0] + ">" + new_value + "<" + part1parts[1] + "/>"
+			result = parts[0] + ">" + new_value + "<" + part1parts[1] + ">"
 		}
 	}
-	fmt.Printf("\n new content %s\n", result)
+	//fmt.Printf("\n new content %s\n", result)
 	replacednodes := replaceNodeRetainid(DB, nodeId, result)
 	if DB.Debug_enabled {
 		fmt.Printf("UpdateNodevalue :Updating node %d\n", nodeId)
@@ -846,11 +999,10 @@ func UpdateAttributevalue(DB *Database, nodeId int, label string, value string) 
 	}
 	contentnew := contentparts0 + ">"
 	for i, part := range contentparts {
-		if i > 0 && len(part) > 0 {
+		if i > 0 && len(strings.TrimSpace(part)) > 0 {
 			contentnew = contentnew + part + ">"
 		}
 	}
-
 	replacednodes := replaceNodeRetainid(DB, nodeId, contentnew)
 	if DB.Debug_enabled {
 		fmt.Printf("UpdateNodevalue :Updating node %d\n", nodeId)
@@ -898,7 +1050,7 @@ func RemoveNode(DB *Database, nodeId int) []int {
 	for i := startindex; i < end; i++ {
 		path := DB.global_paths[startindex]
 		path_parts := strings.Split(path, "/")
-		hashno := stringtono(path_parts[len(path_parts)-1])
+		hashno := stringtono(DB, path_parts[len(path_parts)-1])
 		removeid_fromhashtable(DB, hashno, DB.global_ids[startindex])
 		DB.global_dbLines = remove_string(DB.global_dbLines, startindex)
 		DB.deleted_ids = append(DB.deleted_ids, DB.global_ids[startindex])
@@ -912,94 +1064,30 @@ func RemoveNode(DB *Database, nodeId int) []int {
 	return removedids
 }
 func insertAtLine(DB *Database, lineno int, sub_xml string, retainid int) []int {
+	DB.retainid = retainid
 	DB.removeattribute = ""
-	DB.pathIdStack = DB.pathIdStack[:0]
-	var nodes []int
+	DB.pathIdStack_index = 0
+
 	DB.reference_linenotoinsert = lineno - 1
-	startindex := lineno
+
+	DB.startindex = lineno
 	startindex_tmp := lineno
 	path := DB.global_paths[lineno-1]
-	//fmt.Printf("\n path previous-%s, line-%s", path, DB.global_dbLines[lineno-1])
-	if strings.Contains(DB.global_dbLines[lineno-1], "</") || strings.Contains(DB.global_dbLines[lineno-1], "/>") || strings.Contains(DB.global_dbLines[lineno-1], "->") {
+	if strings.Contains(DB.global_dbLines[lineno-1], "</") || strings.Contains(DB.global_dbLines[lineno-1], "/>") || strings.Contains(DB.global_dbLines[lineno-1], "<!") {
 		path_parts := strings.Split(path, "/")
 		path = path[0 : len(path)-len(path_parts[len(path_parts)-1])-1]
 	}
-	//fmt.Printf("\n path previous-%s", path)
+	DB.path = path
 	newlines := strings.Split(sub_xml, "\n")
-	additional_lines := splitxmlinLines(newlines)
-	first := true
-	for _, line := range additional_lines {
-		unique_id := DB.global_lineLastUniqueid
-		if retainid > 0 && first {
-			unique_id = retainid
-			first = false
-		} else {
-			if DB.global_lineLastUniqueid >= MaxInt {
-				if len(DB.deleted_ids) > 0 {
-					unique_id = DB.deleted_ids[0]
-					DB.deleted_ids = DB.deleted_ids[1:]
-				} else {
-					fmt.Printf("InsertAtLine: Total no. of Uniqueid>= MaxInt, Please increase MaxInt")
-					os.Exit(1)
-				}
-			}
-		}
-		DB.nodeNoToLineno[unique_id] = DB.reference_linenotoinsert //temporary will be overwritten later
-		path = update_path(DB, line, path, unique_id)
-		//fmt.Printf("\nline-%s, path-%s", line, path)
-		if DB.Debug_enabled {
-			fmt.Printf("insertatline :Inserting %s  %s\n", line, path)
-		}
-
-		Value := ""
-		parts := strings.Split(line, ">")
-		part0 := strings.TrimSpace(parts[0])
-		if part0[len(part0)-1:] == "/" {
-			part0 = part0[0 : len(part0)-1]
-		}
-		part0parts := strings.Split(part0, " ")
-		attribute := ""
-		if len(part0parts) > 1 {
-			ind := 0
-			for _, attribute_each := range part0parts {
-				if len(attribute_each) > 0 {
-					if ind > 0 {
-						attribute = attribute + "||" + strings.TrimSpace(attribute_each)
-					}
-					ind++
-				}
-
-			}
-		}
-
-		DB.global_attributes = insert_string(DB.global_attributes, startindex, attribute)
-		part1 := strings.TrimSpace(parts[1])
-		if len(part1) > 0 {
-			if part1[0] == '<' {
-
-			} else {
-				parts2 := strings.Split(part1, "<")
-				Value = strings.TrimSpace(parts2[0])
-			}
-		}
-		DB.global_dbLines = insert_string(DB.global_dbLines, startindex, line)
-		DB.global_values = insert_string(DB.global_values, startindex, Value)
-		DB.global_ids = insert(DB.global_ids, startindex, unique_id)
-		DB.global_paths = insert_string(DB.global_paths, startindex, path)
-		nodes = append(nodes, unique_id)
-
-		if DB.Debug_enabled {
-			fmt.Printf("insertatline :Inserting New Node %d\n", unique_id)
-		}
-		startindex++
-
-		if DB.global_lineLastUniqueid < MaxInt && unique_id == DB.global_lineLastUniqueid {
-			DB.global_lineLastUniqueid++
-		}
-
+	var contentByte strings.Builder
+	for _, line := range newlines {
+		contentByte.WriteString(line)
 	}
-	updateNodenoLineMap(DB, startindex_tmp-1)
+	content := contentByte.String()
+	nodes := splitXmlintoLines(DB, content)
 
+	updateNodenoLineMap(DB, startindex_tmp-1)
+	DB.startindex = -1
 	return nodes
 }
 func ReplaceNode(DB *Database, nodeId int, sub_xml string) []int {
@@ -1127,7 +1215,8 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 	}
 
 	Total := suspectedLinenos(DB, QueryPath, parent_nodeLine, parent_endline)
-
+	//fmt.Printf("\n total")
+	//fmt.Println(DB.suspectedLineStarts)
 	//fmt.Printf("\nlen(start) %d QueryPath %s\n", len(Starts), QueryPath)
 	index := 0
 	for {
@@ -1136,12 +1225,12 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 		}
 
 		start := DB.suspectedLineStarts[index]
-		//fmt.Printf("\nstart %d end %d\n", start, Ends[index])
+		//fmt.Printf("\nstart %d end %d\n", start, DB.suspectedLineEnds[index])
 		if start >= parent_nodeLine && start <= parent_endline {
 			LineNo := start
 
 			for InsideParent && LineNo < len(DB.global_dbLines) && LineNo <= DB.suspectedLineEnds[index] {
-
+				//fmt.Printf("\nDB.global_paths[LineNo] %s ParentPath %s\n", DB.global_paths[LineNo], ParentPath)
 				if isParentPath(ParentPath, DB.global_paths[LineNo]) {
 
 					labels, values, path_matching := compare_path(DB.global_paths[LineNo], QueryPath)
@@ -1156,7 +1245,7 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 						if onlypath {
 							ResultIds = append(ResultIds, LineNo)
 							if DB.Debug_enabled {
-								fmt.Printf(" QueryPath matching -lineno %d\n", LineNo)
+								fmt.Printf(" Query matching -lineno %d\n", LineNo)
 							}
 							Label_Values = append(Label_Values, labelValueStr)
 						} else {
@@ -1164,7 +1253,7 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 							values_attributes := strings.Split(RegExp, ";")
 							all_satisfied := true
 							for _, valueorAttribute := range values_attributes {
-
+								valueorAttribute = strings.TrimSpace(valueorAttribute)
 								if len(valueorAttribute) > 0 {
 
 									if strings.Contains(RegExp, "=") {
@@ -1175,7 +1264,7 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 											attributes := strings.Split(DB.global_attributes[LineNo], "||")
 
 											for _, attrib := range attributes {
-
+												attrib = strings.TrimSpace(attrib)
 												if len(attrib) > 0 {
 													match := false
 													if isRegExp {
@@ -1210,7 +1299,7 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 								ResultIds = append(ResultIds, LineNo)
 								Label_Values = append(Label_Values, labelValueStr)
 								if DB.Debug_enabled {
-									fmt.Printf("QueryPath matching -lineno %d\n", LineNo)
+									fmt.Printf("Query  matching -lineno %d\n", LineNo)
 								}
 							}
 
@@ -1359,6 +1448,7 @@ func GetNode(DB *Database, parent_nodeId int, QUERY_inp string) ([]int, []string
 					if DB.Debug_enabled {
 						fmt.Printf("ProcessQuery :label %s\n", label)
 						fmt.Printf("ProcessQuery :identifiedNode %d\n", identifiedNodes[i])
+						
 					}
 
 				}
