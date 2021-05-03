@@ -458,7 +458,7 @@ func formatxml(lines []string) []string {
 	return newlines
 }
 func fill_DBdata(DB *Database, dbline string, value string, attribute string, NodeName string, mode int) int {
-	
+
 	DB.path = update_path(DB, NodeName, mode, DB.path)
 	if NodeName[0] == '!' && DB.global_lineLastUniqueid == 0 {
 		DB.global_lineLastUniqueid = -1
@@ -922,7 +922,7 @@ func GetNodeAttribute(DB *Database, nodeId int, label string) string {
 		attri := strings.TrimSpace(attri)
 		LabelValue := strings.Split(attri, "=\"")
 		if len(LabelValue) >= 2 {
-			if LabelValue[0] == label {
+			if LabelValue[0] == strings.TrimSpace(label) {
 				Value := LabelValue[1]
 				//removing end quotes
 				//fmt.Printf("Value %s\n", Value)
@@ -1063,6 +1063,100 @@ func RemoveNode(DB *Database, nodeId int) []int {
 	}
 	return removedids
 }
+func validatexml(content string) bool {
+	nodesnames := []string{}
+	nodeEnded := false
+	CommentStarted := false
+	Comment2Started := false
+	xmldeclarationStarted := false
+	CDATAStarted := false
+	lastindex := 0
+	index := 0
+	for {
+		if content[index] == '<' {
+			if !CommentStarted && !CDATAStarted && !xmldeclarationStarted {
+				if content[index+1] == '!' {
+					nodeEnded = false
+					if content[index+2] == '[' {
+						lastindex = index + 3
+						CDATAStarted = true
+						lastindex = index
+					} else if content[index+2] == '-' {
+						CommentStarted = true
+						lastindex = index + 3
+					} else {
+						Comment2Started = true
+						lastindex = index + 2
+					}
+				} else if content[index+1] == '?' {
+					nodeEnded = false
+					xmldeclarationStarted = true
+					lastindex = index + 2
+				} else if content[index+1] == '/' {
+					nodeEnded = true
+					lastindex = index + 2
+				} else {
+					lastindex = index + 1
+				}
+			}
+		}
+		if content[index] == '>' {
+			if CommentStarted {
+				if content[index-1] == '-' {
+					CommentStarted = false
+					lastindex = index + 1
+				}
+			} else if CDATAStarted {
+				if content[index-1] == ']' {
+					lastindex = index + 1
+					CDATAStarted = false
+				}
+			} else if xmldeclarationStarted {
+				if content[index-1] == '?' {
+					xmldeclarationStarted = false
+					lastindex = index + 1
+				}
+			} else if Comment2Started {
+				Comment2Started = false
+				lastindex = index + 1
+			} else {
+				if content[index-1] == '/' {
+					lastindex = index + 1
+					nodeEnded = false
+				} else {
+					if nodeEnded {
+						if len(nodesnames) == 0 {
+							return false
+						}
+						if strings.TrimSpace(nodesnames[len(nodesnames)-1]) != strings.TrimSpace(content[lastindex:index]) {
+							return false
+						}
+						nodesnames = nodesnames[0 : len(nodesnames)-1]
+						nodeEnded = false
+					} else {
+						parts := strings.Split(strings.TrimSpace(content[lastindex:index]), " ")
+						nodesnames = append(nodesnames, parts[0])
+					}
+					lastindex = index + 1
+				}
+			}
+		}
+		index++
+		if index >= len(content) {
+			break
+		}
+	}
+	if len(strings.TrimSpace(content[lastindex:index])) > 0 {
+		return false
+	}
+	if CommentStarted || xmldeclarationStarted || Comment2Started || CDATAStarted {
+		return false
+	}
+	if len(nodesnames) > 0 {
+		return false
+	}
+	return true
+}
 func insertAtLine(DB *Database, lineno int, sub_xml string, retainid int) []int {
 	DB.retainid = retainid
 	DB.removeattribute = ""
@@ -1084,6 +1178,10 @@ func insertAtLine(DB *Database, lineno int, sub_xml string, retainid int) []int 
 		contentByte.WriteString(line)
 	}
 	content := contentByte.String()
+	if !validatexml(content) {
+		fmt.Printf("\n xml content is not proper- aborting insertion")
+		return []int{}
+	}
 	nodes := splitXmlintoLines(DB, content)
 
 	updateNodenoLineMap(DB, startindex_tmp-1)
@@ -1093,6 +1191,10 @@ func insertAtLine(DB *Database, lineno int, sub_xml string, retainid int) []int 
 func ReplaceNode(DB *Database, nodeId int, sub_xml string) []int {
 	if DB.Debug_enabled {
 		fmt.Printf("replaceNode :Replacing node %d\n", nodeId)
+	}
+	if !validatexml(sub_xml) {
+		fmt.Printf("\n xml content is not proper- aborting replacing")
+		return []int{}
 	}
 	startindex := NodeLine(DB, nodeId)
 	RemoveNode(DB, nodeId)
@@ -1110,6 +1212,10 @@ func replaceNodeRetainid(DB *Database, nodeId int, sub_xml string) []int {
 	return nodes
 }
 func AppendAfterNode(DB *Database, nodeId int, sub_xml string) []int {
+	if !validatexml(sub_xml) {
+		fmt.Printf("\n xml content is not proper- aborting AppendAfterNode")
+		return []int{}
+	}
 	end := NodeEnd(DB, nodeId)
 	if end < 0 {
 		fmt.Printf("Warning :node  doesnot exist\n")
@@ -1119,6 +1225,10 @@ func AppendAfterNode(DB *Database, nodeId int, sub_xml string) []int {
 	return nodes
 }
 func AppendBeforeNode(DB *Database, nodeId int, sub_xml string) []int {
+	if !validatexml(sub_xml) {
+		fmt.Printf("\n xml content is not proper- aborting AppendBeforeNode")
+		return []int{}
+	}
 	start := NodeLine(DB, nodeId)
 	if start < 0 {
 		fmt.Printf("Warning :node  doesnot exist\n")
@@ -1448,7 +1558,7 @@ func GetNode(DB *Database, parent_nodeId int, QUERY_inp string) ([]int, []string
 					if DB.Debug_enabled {
 						fmt.Printf("ProcessQuery :label %s\n", label)
 						fmt.Printf("ProcessQuery :identifiedNode %d\n", identifiedNodes[i])
-						
+
 					}
 
 				}
