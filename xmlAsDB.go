@@ -1252,6 +1252,11 @@ func replaceNodeRetainid(DB *Database, nodeId int, sub_xml string) ([]int, error
 	if DB.Debug_enabled {
 		fmt.Printf("replaceNodeRetainid :Replacing node %d\n", nodeId)
 	}
+	if !validatexml(sub_xml) {
+		fmt.Printf("\n xml content is not proper- aborting replacing")
+		DB.modLock = false
+		return []int{}, errors.New("xml content is not proper- aborting replacing")
+	}
 	startindex := NodeLine(DB, nodeId)
 	removed := remove_Node(DB, nodeId)
 	DB.deleted_ids = remove(DB.deleted_ids, len(DB.deleted_ids)-len(removed))
