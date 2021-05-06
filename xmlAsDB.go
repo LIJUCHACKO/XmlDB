@@ -43,6 +43,34 @@ func readLines(path string) (string, error) {
 	}
 	return content.String(), scanner.Err()
 }
+func ReplaceHTMLSpecialEntities(input string) string {
+	output := strings.Replace(input, "&amp;", "&", -1)
+	output = strings.Replace(output, "&lt;", "<", -1)
+	output = strings.Replace(output, "&gt;", ">", -1)
+	output = strings.Replace(output, "&quot;", "\"", -1)
+	output = strings.Replace(output, "&lsquo;", "‘", -1)
+	output = strings.Replace(output, "&rsquo;", "’", -1)
+	output = strings.Replace(output, "&tilde;", "~", -1)
+	output = strings.Replace(output, "&ndash;", "–", -1)
+	output = strings.Replace(output, "&mdash;", "—", -1)
+	output = strings.Replace(output, "&apos;", "'", -1)
+
+	return output
+}
+func ReplacewithHTMLSpecialEntities(input string) string {
+	output := strings.Replace(input, "&", "&amp;", -1)
+	output = strings.Replace(output, "<", "&lt;", -1)
+	output = strings.Replace(output, ">", "&gt;", -1)
+	output = strings.Replace(output, "\"", "&quot;", -1)
+	output = strings.Replace(output, "‘", "&lsquo;", -1)
+	output = strings.Replace(output, "’", "&rsquo;", -1)
+	output = strings.Replace(output, "~", "&tilde;", -1)
+	output = strings.Replace(output, "–", "&ndash;", -1)
+	output = strings.Replace(output, "—", "&mdash;", -1)
+	output = strings.Replace(output, "'", "&apos;", -1)
+
+	return output
+}
 
 type Database struct {
 	filename                 string
@@ -965,7 +993,7 @@ func UpdateNodevalue(DB *Database, nodeId int, new_value string) ([]int, error) 
 		DB.modLock = false
 		return []int{}, errors.New("Value contains xml")
 	}
-	nodes, err := update_nodevalue(DB, nodeId, new_value)
+	nodes, err := update_nodevalue(DB, nodeId, ReplacewithHTMLSpecialEntities(new_value))
 	DB.modLock = false
 	return nodes, err
 }
@@ -1458,7 +1486,7 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 								valueorAttribute = strings.TrimSpace(valueorAttribute)
 								if len(valueorAttribute) > 0 {
 
-									if strings.Contains(RegExp, "=") {
+									if strings.Contains(RegExp, "=\"") {
 
 										if len(strings.TrimSpace(DB.global_attributes[LineNo])) == 0 {
 											all_satisfied = false
@@ -1484,6 +1512,7 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 										}
 
 									} else {
+										valueorAttribute = ReplaceHTMLSpecialEntities(valueorAttribute)
 										match := false
 										if isRegExp {
 											match, _ = regexp.MatchString(valueorAttribute, DB.global_values[LineNo])
