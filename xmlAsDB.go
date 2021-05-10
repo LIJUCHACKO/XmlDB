@@ -86,11 +86,8 @@ type Database struct {
 	nodeNoToLineno           []int
 	pathKeylookup            [][]int
 	Nodeendlookup            []int
-	suspectedLineStarts      []int
-	suspectedLineEnds        []int
 	pathIdStack              [2000]int
 	pathIdStack_index        int
-	susplock                 bool
 	reference_linenotoinsert int
 	retainid                 int
 	startindex               int
@@ -125,14 +122,12 @@ func stringtono(DB *Database, line string) int {
 	return total
 }
 
-func suspectedLinenos(DB *Database, path string, lowerbound int, upperbound int) int {
+func suspectedLinenos(DB *Database, path string, lowerbound int, upperbound int) ([]int, []int) {
 
-	for DB.susplock {
-		fmt.Printf("DB.susplock\n")
-	}
-	DB.susplock = true
 	pathParts := strings.Split(path, "/")
 	var NodeNos []int
+	var suspectedLineStarts []int
+	var suspectedLineEnds []int
 	SearchtillEnd := 0
 	index := len(pathParts) - 1
 	for {
@@ -157,25 +152,24 @@ func suspectedLinenos(DB *Database, path string, lowerbound int, upperbound int)
 	//fmt.Printf("\nNodeNos ")
 	//fmt.Println(NodeNos)
 	if len(NodeNos) == 0 {
-		DB.suspectedLineStarts[0] = 0
-		DB.suspectedLineEnds[0] = len(DB.global_dbLines)
+		suspectedLineStarts = append(suspectedLineStarts, 0)
+		suspectedLineEnds = append(suspectedLineEnds, len(DB.global_dbLines))
 
-		return 1
+		return suspectedLineStarts, suspectedLineEnds //1
 	} else {
-		for i, node := range NodeNos {
-
-			DB.suspectedLineStarts[i] = DB.nodeNoToLineno[node]
+		for _, node := range NodeNos { 
+			suspectedLineStarts = append(suspectedLineStarts, DB.nodeNoToLineno[node])
 			//fmt.Printf("\n DB.nodeNoToLineno[node] %d ", DB.nodeNoToLineno[node])
 			if SearchtillEnd == 1 {
-				DB.suspectedLineEnds[i] = DB.nodeNoToLineno[DB.Nodeendlookup[node]] + 1
+				suspectedLineEnds = append(suspectedLineEnds, DB.nodeNoToLineno[DB.Nodeendlookup[node]] + 1)
 				//fmt.Printf("\n DB.suspectedLineEnds[i] %d ", DB.suspectedLineEnds[i])
 			} else {
-				DB.suspectedLineEnds[i] = DB.nodeNoToLineno[node]
+				suspectedLineEnds = append(suspectedLineEnds, DB.nodeNoToLineno[node])
 			}
 		}
 	}
 
-	return len(NodeNos)
+	return suspectedLineStarts, suspectedLineEnds 
 }
 func compare_path(current_path string, reference_path string) ([]string, []string, bool) {
 	ref_pathParts := strings.Split(reference_path, "/")
@@ -891,8 +885,6 @@ func load_xmlstring(DB *Database, content string) {
 	DB.nodeNoToLineno = make([]int, DB.maxInt)
 	DB.pathKeylookup = make([][]int, DB.maxInt)
 	DB.Nodeendlookup = make([]int, DB.maxInt)
-	DB.suspectedLineStarts = make([]int, DB.maxInt/2)
-	DB.suspectedLineEnds = make([]int, DB.maxInt/2)
 	DB.startindex = -1
 	DB.retainid = -1
 	DB.pathIdStack_index = 0
@@ -904,7 +896,6 @@ func load_xmlstring(DB *Database, content string) {
 	DB.global_lineLastUniqueid = 0
 	DB.removeattribute = ""
 	DB.reference_linenotoinsert = 0
-	DB.susplock = false
 	DB.modLock = false
 	DB.path = ""
 	splitXmlintoLines(DB, content)
@@ -1364,26 +1355,21 @@ func LocateRequireParentdNode(DB *Database, parent_nodeLine int, RequiredPath st
 	}
 	ParentPath := DB.global_paths[parent_nodeLine]
 
-	Total := suspectedLinenos(DB, RequiredPath, parent_nodeLine, LineNo_inp+1)
+	suspectedLineStarts, _ := suspectedLinenos(DB, RequiredPath, parent_nodeLine, LineNo_inp+1)
 	if DB.Debug_enabled {
 		fmt.Printf("#####LocateRequireParentdNode###\n ")
 		fmt.Printf("ParentPath- %s\n", ParentPath)
 		fmt.Printf("LineNo %d\n", LineNo_inp)
 		fmt.Printf("RequiredPath %s\n", RequiredPath)
 		fmt.Printf("parent_nodeLine %d\n", parent_nodeLine)
-		fmt.Printf("No of Suspected lines-%d\n", len(DB.suspectedLineStarts))
 	}
 
 	//locate line just above LineNo_inp
 	requiredline := 0
 	//for _, start := range Starts {
 	i := 0
-	for {
-		if i >= Total {
-			break
-		}
+	for _, start := range suspectedLineStarts {
 
-		start := DB.suspectedLineStarts[i]
 		if start >= parent_nodeLine && start <= LineNo_inp {
 			if start > requiredline {
 				requiredline = start
@@ -1391,7 +1377,6 @@ func LocateRequireParentdNode(DB *Database, parent_nodeLine int, RequiredPath st
 		}
 		i++
 	}
-	DB.susplock = false
 	if len(DB.global_paths[requiredline]) >= len(ParentPath) {
 
 		_, _, stat := compare_path(DB.global_paths[requiredline], RequiredPath)
@@ -1444,22 +1429,13 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 
 	}
 
-	Total := suspectedLinenos(DB, QueryPath, parent_nodeLine, parent_endline)
-	//fmt.Printf("\n total")
-	//fmt.Println(DB.suspectedLineStarts)
-	//fmt.Printf("\nlen(start) %d QueryPath %s\n", len(Starts), QueryPath)
-	index := 0
-	for {
-		if index >= Total {
-			break
-		}
+	suspectedLineStarts, suspectedLineEnds := suspectedLinenos(DB, QueryPath, parent_nodeLine, parent_endline)
+	for index, start := range suspectedLineStarts {
 
-		start := DB.suspectedLineStarts[index]
-		//fmt.Printf("\nstart %d end %d\n", start, DB.suspectedLineEnds[index])
 		if start >= parent_nodeLine && start <= parent_endline {
 			LineNo := start
 
-			for InsideParent && LineNo < len(DB.global_dbLines) && LineNo <= DB.suspectedLineEnds[index] {
+			for InsideParent && LineNo < len(DB.global_dbLines) && LineNo <= suspectedLineEnds[index] {
 				//fmt.Printf("\nDB.global_paths[LineNo] %s ParentPath %s\n", DB.global_paths[LineNo], ParentPath)
 				if isParentPath(ParentPath, DB.global_paths[LineNo]) {
 
@@ -1545,7 +1521,6 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 		}
 		index++
 	}
-	DB.susplock = false
 	if DB.Debug_enabled {
 		fmt.Printf("===LocateNode===\n")
 	}
