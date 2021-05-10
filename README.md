@@ -112,6 +112,6 @@ after adding Attribute-
 
      `identifiedNodes, _ = xmlDB.GetNode(DB, 0, "../h1")`
 
-Also see Example  :"https://github.com/LIJUCHACKO/ods2csv_xmlDB". I have used this library to parse ods xml content.
+Also see Example  :"https://github.com/LIJUCHACKO/ods2csv". I have used this library to parse ods xml content.
 
 
