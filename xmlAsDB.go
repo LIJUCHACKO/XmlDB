@@ -157,11 +157,11 @@ func suspectedLinenos(DB *Database, path string, lowerbound int, upperbound int)
 
 		return suspectedLineStarts, suspectedLineEnds //1
 	} else {
-		for _, node := range NodeNos { 
+		for _, node := range NodeNos {
 			suspectedLineStarts = append(suspectedLineStarts, DB.nodeNoToLineno[node])
 			//fmt.Printf("\n DB.nodeNoToLineno[node] %d ", DB.nodeNoToLineno[node])
 			if SearchtillEnd == 1 {
-				suspectedLineEnds = append(suspectedLineEnds, DB.nodeNoToLineno[DB.Nodeendlookup[node]] + 1)
+				suspectedLineEnds = append(suspectedLineEnds, DB.nodeNoToLineno[DB.Nodeendlookup[node]]+1)
 				//fmt.Printf("\n DB.suspectedLineEnds[i] %d ", DB.suspectedLineEnds[i])
 			} else {
 				suspectedLineEnds = append(suspectedLineEnds, DB.nodeNoToLineno[node])
@@ -169,7 +169,7 @@ func suspectedLinenos(DB *Database, path string, lowerbound int, upperbound int)
 		}
 	}
 
-	return suspectedLineStarts, suspectedLineEnds 
+	return suspectedLineStarts, suspectedLineEnds
 }
 func compare_path(current_path string, reference_path string) ([]string, []string, bool) {
 	ref_pathParts := strings.Split(reference_path, "/")
@@ -483,7 +483,7 @@ func formatxml(lines []string) []string {
 }
 func fill_DBdata(DB *Database, dbline string, value string, attribute string, NodeName string, mode int) int {
 
-	DB.path = update_path(DB, NodeName, mode, DB.path)
+	update_path(DB, NodeName, mode)
 	if NodeName[0] == '!' && DB.global_lineLastUniqueid == 0 {
 		DB.global_lineLastUniqueid = -1
 	}
@@ -553,35 +553,33 @@ func fill_DBdata(DB *Database, dbline string, value string, attribute string, No
 	//fmt.Printf("\n%s %d %d %d", DB.path, DB.pathIdStack_index, unique_id, mode)
 	return unique_id
 }
-func update_path(DB *Database, NodeName string, mode int, path string) string {
+func update_path(DB *Database, NodeName string, mode int) {
 	//fmt.Printf(" path- %s  line-%s mode-%d\n", path, NodeName, mode)
 	//1.Add 2.Add and Remove 3.Remove
-	if len(path) > 3 {
-		if path[len(path)-2:len(path)] == "/~" {
-			path = path[0 : len(path)-2]
-			//removeattribute = ""
+	if len(DB.path) > 3 {
+		if DB.path[len(DB.path)-2:len(DB.path)] == "/~" {
+			DB.path = DB.path[0 : len(DB.path)-2]
 		}
 	}
 
 	if len(DB.removeattribute) > 0 {
-		if path[len(path)-len(DB.removeattribute):] == DB.removeattribute {
-			path = path[0 : len(path)-len(DB.removeattribute)-1]
+		if DB.path[len(DB.path)-len(DB.removeattribute):] == DB.removeattribute {
+			DB.path = DB.path[0 : len(DB.path)-len(DB.removeattribute)]
 			DB.removeattribute = ""
 		}
 	}
 	if mode >= 2 {
-		DB.removeattribute = NodeName
+		DB.removeattribute = "/" + NodeName
 	}
 	if mode <= 2 {
-		path = path + "/" + NodeName
+		DB.path = DB.path + "/" + NodeName
 	}
 
 	if mode == 3 {
 		//path = path[0 : len(path)-len(NodeName)-1]
-		path = path + "/~"
+		DB.path = DB.path + "/~"
 	}
-	//fmt.Printf(" path- %s  line-%s \n", path, line)
-	return path
+	//fmt.Printf(" path- %s  line-%s \n", DB.path, line)
 }
 func splitXmlintoLines(DB *Database, content string) []int {
 
@@ -756,7 +754,6 @@ func splitXmlintoLines(DB *Database, content string) []int {
 								attributebuffer.WriteString(strings.TrimSpace(part))
 							}
 						} else {
-							//path = update_pathsimple(DB, part, 2, path)
 						}
 					}
 					lastindex = index + 1
