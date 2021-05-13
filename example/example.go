@@ -53,7 +53,7 @@ func main() {
 	fmt.Printf("\n### Updating node ##\n")
 	identifiedNodes, _ = xmlDB.GetNode(DB, 0, "head/title")
 	for _, node := range identifiedNodes {
-		newnodes := xmlDB.ReplaceNode(DB, node, "<title>test</title>")
+		newnodes, _ := xmlDB.ReplaceNode(DB, node, "<title>test</title>")
 		fmt.Printf("After updation\n")
 		fmt.Printf("old node value- %s", xmlDB.GetNodeValue(DB, node)) //no output, existing id is removed and new id added
 		fmt.Printf("\nnew node value- %s", xmlDB.GetNodeValue(DB, newnodes[0]))
