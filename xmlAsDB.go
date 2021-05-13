@@ -94,7 +94,7 @@ type Database struct {
 	path                     string
 	MaxNooflines             int
 	maxInt                   int
-	modLock                  bool
+	WriteLock                bool
 }
 
 func updateNodenoLineMap(DB *Database, fromLine int) {
@@ -110,6 +110,7 @@ func updateNodenoLineMap(DB *Database, fromLine int) {
 
 		lineno++
 	}
+	DB.WriteLock = false
 }
 func stringtono(DB *Database, line string) int {
 	total := 0
@@ -581,8 +582,8 @@ func update_path(DB *Database, NodeName string, mode int) {
 	}
 	//fmt.Printf(" path- %s  line-%s \n", DB.path, line)
 }
-func splitXmlintoLines(DB *Database, content string) []int {
-
+func parseAndLoadXml(DB *Database, content string) []int {
+	DB.WriteLock = true
 	nodes := []int{}
 	var nodeStart strings.Builder
 	var attributebuffer strings.Builder
@@ -822,6 +823,9 @@ func splitXmlintoLines(DB *Database, content string) []int {
 }
 
 func NodeLine(DB *Database, nodeId int) int {
+	for DB.WriteLock {
+		fmt.Printf("Waiting for WriteLock-NodeLine\n")
+	}
 	lineno := DB.nodeNoToLineno[nodeId]
 	if lineno < 0 {
 		fmt.Printf("Warning :node  doesnot exist\n")
@@ -830,6 +834,9 @@ func NodeLine(DB *Database, nodeId int) int {
 	return lineno
 }
 func NodeEnd(DB *Database, nodeId int) int {
+	for DB.WriteLock {
+		fmt.Printf("Waiting for WriteLock-NodeEnd\n")
+	}
 	lineno := DB.nodeNoToLineno[nodeId]
 	if lineno < 0 {
 		fmt.Printf("Warning :node  doesnot exist\n")
@@ -848,6 +855,9 @@ func NodeEnd(DB *Database, nodeId int) int {
 
 }
 func SaveAs_DB(DB *Database, filename string) {
+	for DB.WriteLock {
+		fmt.Printf("Waiting for WriteLock-Save_DB\n")
+	}
 	//lines := formatxml(DB.global_dbLines)
 	err := writeLines(DB, filename)
 	if err != nil {
@@ -856,6 +866,9 @@ func SaveAs_DB(DB *Database, filename string) {
 	}
 }
 func Save_DB(DB *Database) {
+	for DB.WriteLock {
+		fmt.Printf("Waiting for WriteLock-Save_DB\n")
+	}
 	if len(DB.filename) == 0 {
 		fmt.Printf("Filename not specified\n")
 		return
@@ -893,9 +906,9 @@ func load_xmlstring(DB *Database, content string) {
 	DB.global_lineLastUniqueid = 0
 	DB.removeattribute = ""
 	DB.reference_linenotoinsert = 0
-	DB.modLock = false
+
 	DB.path = ""
-	splitXmlintoLines(DB, content)
+	parseAndLoadXml(DB, content)
 
 	if DB.Debug_enabled {
 		fmt.Printf("load_db : over\n")
@@ -932,6 +945,9 @@ func Load_db(DB *Database, filename string) error {
 }
 
 func GetNodeAttribute(DB *Database, nodeId int, label string) string {
+	for DB.WriteLock {
+		fmt.Printf("Waiting for WriteLock-GetNodeAttribute\n")
+	}
 	LineNo := DB.nodeNoToLineno[nodeId]
 	if LineNo < 0 {
 		fmt.Printf("Warning :node  doesnot exist\n")
@@ -946,7 +962,6 @@ func GetNodeAttribute(DB *Database, nodeId int, label string) string {
 				Value := LabelValue[1]
 				//removing end quotes
 				//fmt.Printf("Value %s\n", Value)
-
 				return Value[:len(Value)-1]
 			}
 		}
@@ -954,6 +969,9 @@ func GetNodeAttribute(DB *Database, nodeId int, label string) string {
 	return ""
 }
 func GetNodeValue(DB *Database, nodeId int) string {
+	for DB.WriteLock {
+		fmt.Printf("Waiting for WriteLock-GetNodeValue\n")
+	}
 	lineno := DB.nodeNoToLineno[nodeId]
 	if lineno < 0 {
 		fmt.Printf("Warning :node  doesnot exist\n")
@@ -962,6 +980,9 @@ func GetNodeValue(DB *Database, nodeId int) string {
 	return DB.global_values[lineno]
 }
 func GetNodeName(DB *Database, nodeId int) string {
+	for DB.WriteLock {
+		fmt.Printf("Waiting for WriteLock-GetNodeName\n")
+	}
 	lineno := DB.nodeNoToLineno[nodeId]
 	if lineno < 0 {
 		fmt.Printf("Warning :node  doesnot exist\n")
@@ -972,17 +993,17 @@ func GetNodeName(DB *Database, nodeId int) string {
 	return pathparts[len(pathparts)-1]
 }
 func UpdateNodevalue(DB *Database, nodeId int, new_value string) ([]int, error) {
-	for DB.modLock {
-		fmt.Printf("DB.modLock UpdateNodevalue\n")
+	for DB.WriteLock {
+		fmt.Printf("Waiting for WriteLock-UpdateNodevalue\n")
 	}
-	DB.modLock = true
+
 	if strings.Contains(new_value, "<") || strings.Contains(new_value, ">") {
 		fmt.Printf("Error :Value contains xml\n")
-		DB.modLock = false
+
 		return []int{}, errors.New("Value contains xml")
 	}
 	nodes, err := update_nodevalue(DB, nodeId, ReplacewithHTMLSpecialEntities(new_value))
-	DB.modLock = false
+
 	return nodes, err
 }
 
@@ -1021,14 +1042,14 @@ func update_nodevalue(DB *Database, nodeId int, new_value string) ([]int, error)
 	return replacednodes, err
 }
 func UpdateAttributevalue(DB *Database, nodeId int, label string, value string) ([]int, error) {
-	for DB.modLock {
-		fmt.Printf("DB.modLock UpdateAttributevalue\n")
+	for DB.WriteLock {
+		fmt.Printf("Waiting for WriteLock-UpdateAttributevalue\n")
 	}
-	DB.modLock = true
+
 	content := GetNodeContents(DB, nodeId)
 	if len(content) == 0 {
 		fmt.Printf("Warning :node  doesnot exist\n")
-		DB.modLock = false
+
 		return []int{}, errors.New("node  doesnot exist")
 	}
 	contentparts := strings.Split(content, ">")
@@ -1053,10 +1074,14 @@ func UpdateAttributevalue(DB *Database, nodeId int, label string, value string) 
 		fmt.Printf("UpdateNodevalue :Updating node %d\n", nodeId)
 		fmt.Printf("%s\n", GetNodeContents(DB, nodeId))
 	}
-	DB.modLock = false
+
 	return replacednodes, err
 }
 func GetNodeContents(DB *Database, nodeId int) string {
+	for DB.WriteLock {
+		fmt.Printf("Waiting for WriteLock-GetNodeContents\n")
+	}
+
 	Output := ""
 	beginning := NodeLine(DB, nodeId)
 	if beginning < 0 {
@@ -1087,12 +1112,13 @@ func GetNodeContents(DB *Database, nodeId int) string {
 	return Output
 }
 func RemoveNode(DB *Database, nodeId int) []int {
-	for DB.modLock {
-		fmt.Printf("DB.modLock RemoveNode\n")
+	for DB.WriteLock {
+		fmt.Printf("Waiting for WriteLock-RemoveNode\n")
 	}
-	DB.modLock = true
+
 	nodes := remove_Node(DB, nodeId)
-	DB.modLock = false
+
+	updateNodenoLineMap(DB, DB.startindex)
 	return nodes
 }
 func remove_Node(DB *Database, nodeId int) []int {
@@ -1100,9 +1126,12 @@ func remove_Node(DB *Database, nodeId int) []int {
 	if DB.Debug_enabled {
 		fmt.Printf("removeNode :Removing node %d\n", nodeId)
 	}
+
 	startindex := NodeLine(DB, nodeId)
 	end := NodeEnd(DB, nodeId)
 	var removedids []int
+	DB.startindex = startindex
+	DB.WriteLock = true
 	for i := startindex; i < end; i++ {
 		path := DB.global_paths[startindex]
 		path_parts := strings.Split(path, "/")
@@ -1239,30 +1268,33 @@ func insertAtLine(DB *Database, lineno int, sub_xml string, retainid int) ([]int
 		fmt.Printf("\n xml content is not proper- aborting insertion")
 		return []int{}, errors.New("xml content is not proper- aborting insertion")
 	}
-	nodes := splitXmlintoLines(DB, content)
+	nodes := parseAndLoadXml(DB, content)
 
 	updateNodenoLineMap(DB, startindex_tmp-1)
 	DB.startindex = -1
 	return nodes, nil
 }
 func ReplaceNode(DB *Database, nodeId int, sub_xml string) ([]int, error) {
-	for DB.modLock {
-		fmt.Printf("DB.modLock ReplaceNode\n")
+	for DB.WriteLock {
+		fmt.Printf("Waiting for WriteLock-ReplaceNode\n")
 	}
-	DB.modLock = true
+
 	if DB.Debug_enabled {
 		fmt.Printf("replaceNode :Replacing node %d\n", nodeId)
 	}
 	if !validatexml(sub_xml) {
 		fmt.Printf("\n xml content is not proper- aborting replacing")
-		DB.modLock = false
+
 		return []int{}, errors.New("xml content is not proper- aborting replacing")
 	}
 	startindex := NodeLine(DB, nodeId)
-	remove_Node(DB, nodeId)
-	nodes, err := insertAtLine(DB, startindex, sub_xml, -1)
-	DB.modLock = false
-	return nodes, err
+	rmids := remove_Node(DB, nodeId)
+	if len(rmids) > 0 {
+		nodes, err := insertAtLine(DB, startindex, sub_xml, -1)
+
+		return nodes, err
+	}
+	return []int{}, errors.New("Node not found")
 }
 func replaceNodeRetainid(DB *Database, nodeId int, sub_xml string) ([]int, error) {
 	if DB.Debug_enabled {
@@ -1270,7 +1302,7 @@ func replaceNodeRetainid(DB *Database, nodeId int, sub_xml string) ([]int, error
 	}
 	if !validatexml(sub_xml) {
 		fmt.Printf("\n xml content is not proper- aborting replacing")
-		DB.modLock = false
+
 		return []int{}, errors.New("xml content is not proper- aborting replacing")
 	}
 	startindex := NodeLine(DB, nodeId)
@@ -1280,69 +1312,69 @@ func replaceNodeRetainid(DB *Database, nodeId int, sub_xml string) ([]int, error
 	return nodes, err
 }
 func InserSubNode(DB *Database, nodeId int, sub_xml string) ([]int, error) {
-	for DB.modLock {
-		fmt.Printf("DB.modLock InserSubNode\n")
+	for DB.WriteLock {
+		fmt.Printf("Waiting for WriteLock-InserSubNode\n")
 	}
-	DB.modLock = true
+
 	if !validatexml(sub_xml) {
 		fmt.Printf("\n xml content is not proper- aborting InserSubNode")
-		DB.modLock = false
+
 		return []int{}, errors.New("xml content is not proper- aborting InserSubNode")
 	}
 
 	end := NodeEnd(DB, nodeId)
 	if (end - NodeLine(DB, nodeId)) == 1 {
 		nodes, err := update_nodevalue(DB, nodeId, sub_xml)
-		DB.modLock = false
+
 		return nodes, err
 	}
 	if end < 0 {
 		fmt.Printf("Error :node  doesnot exist\n")
-		DB.modLock = false
+
 		return []int{}, errors.New("node  doesnot exist")
 	}
 	nodes, err := insertAtLine(DB, end-1, sub_xml, -1)
-	DB.modLock = false
+
 	return nodes, err
 }
 func AppendAfterNode(DB *Database, nodeId int, sub_xml string) ([]int, error) {
-	for DB.modLock {
-		fmt.Printf("DB.modLock AppendAfterNode\n")
+	for DB.WriteLock {
+		fmt.Printf("Waiting for WriteLock-AppendAfterNode\n")
 	}
-	DB.modLock = true
+
 	if !validatexml(sub_xml) {
 		fmt.Printf("\nError : xml content is not proper- aborting AppendAfterNode")
-		DB.modLock = false
+
 		return []int{}, errors.New("xml content is not proper- aborting ")
 	}
 	end := NodeEnd(DB, nodeId)
 	if end < 0 {
 		fmt.Printf("Error :node  doesnot exist\n")
-		DB.modLock = false
+
 		return []int{}, errors.New("node  doesnot exist")
 	}
 	nodes, err := insertAtLine(DB, end, sub_xml, -1)
-	DB.modLock = false
+
 	return nodes, err
 }
 func AppendBeforeNode(DB *Database, nodeId int, sub_xml string) ([]int, error) {
-	for DB.modLock {
-		fmt.Printf("DB.modLock AppendBeforeNode\n")
+	for DB.WriteLock {
+		fmt.Printf("Waiting for WriteLock-AppendBeforeNode\n")
 	}
-	DB.modLock = true
+
 	if !validatexml(sub_xml) {
 		fmt.Printf("\n xml content is not proper- aborting AppendBeforeNode")
-		DB.modLock = false
+
 		return []int{}, errors.New("xml content is not proper- aborting ")
 	}
 	start := NodeLine(DB, nodeId)
 	if start < 0 {
 		fmt.Printf("Error :node  doesnot exist\n")
-		DB.modLock = false
+
 		return []int{}, errors.New("node  doesnot exist")
 	}
 	nodes, err := insertAtLine(DB, start, sub_xml, -1)
-	DB.modLock = false
+
 	return nodes, err
 }
 func LocateRequireParentdNode(DB *Database, parent_nodeLine int, RequiredPath string, LineNo_inp int) int {
@@ -1524,6 +1556,9 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 	return ResultIds, Label_Values
 }
 func ParentNode(DB *Database, nodeId int) int {
+	for DB.WriteLock {
+		fmt.Printf("Waiting for WriteLock-ParentNode\n")
+	}
 	LineNo := DB.nodeNoToLineno[nodeId]
 	ResultId := -1
 	if LineNo < 0 {
@@ -1537,6 +1572,9 @@ func ParentNode(DB *Database, nodeId int) int {
 }
 
 func ChildNodes(DB *Database, nodeId int) []int {
+	for DB.WriteLock {
+		fmt.Printf("Waiting for WriteLock-ChildNodes\n")
+	}
 	LineNo := DB.nodeNoToLineno[nodeId]
 	var ResultIds []int
 	if LineNo < 0 {
@@ -1569,7 +1607,9 @@ func ChildNodes(DB *Database, nodeId int) []int {
 
 func GetNode(DB *Database, parent_nodeId int, QUERY_inp string) ([]int, []string) {
 	// ldld/dkdicmk/<xe>/kjk[]/lkl/
-
+	for DB.WriteLock {
+		fmt.Printf("Waiting for WriteLock-GetNode\n")
+	}
 	if DB.Debug_enabled {
 
 		fmt.Printf("==Process Query===\n")
