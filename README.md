@@ -115,3 +115,74 @@ after adding Attribute-
 Also see Example  :"https://github.com/LIJUCHACKO/ods2csv". I have used this library to parse ods xml content.
 
 
+## Working/Software Design
+
+####INPUT(sample)
+
+```
+<!DOCTYPE html>
+<html>
+   <head><title>This is document title</title></head>	
+   <body style="123">
+      <h1>This is a heading</h1>
+      <p>Hello World!</p>
+   </body>	
+</html>
+```
+####After parsing- global variables are filled as shown
+
+| global_dbLines                         |   global_ids |  global_paths |  global_values         |  global_attributes      |
+|----------------------------------------|--------------|---------------|------------------------|-------------------------|
+|` <!DOCTYPE html> `                     |  -1          |               |                        |                         |
+|` <head> `                              |   0          | /head         |                        |                         |
+|` <title>This is document title</title>`|   1          | /head/title   | This is document title |                         |
+| ` <\head> `                            |   2          | /head/~       |                        |                         |
+| `<body style="123" font="arial">`      |   3          | /body         |                        | style="123" font="arial"|
+| `<h1>This is a heading</h1>  `         |   4          | /body/h1      |                        |                         |
+| `<p>Hello World!</p> `                 |   5          | /body/p       | This is a heading      |                         |
+| `</body>`                              |   6          | /body/~       | Hello World!           |                         |
+|                                        |              |               |                        |                         |
+
+Note:- If a new node is inserted in between, global_id '7' will be assigned to it. global_id will be unique and will be retained till the node is deleted.
+
+
+####nodeNoToLineno contains  line no for every global id.
+
+|   index/global_id|  nodeNoToLineno[index]|
+|------------------|-----------------------|
+|     0            |    1                  |
+|     1            |    2                  |
+|     2            |    3                  |
+|     3            |    4                  |
+
+
+
+
+
+####Nodeendlookup contains global_id of the node end.
+
+|   index/global_id|  Nodeendlookup[index]|
+|------------------|----------------------|
+|     0            |    2                 |
+|     1            |    1                 |
+|     2            |    2                 |
+|     3            |    6                 |
+|     4            |    4                 |
+|     5            |    5                 |
+
+
+#####pathKeylookup  is for quick lookup for line nos corresponding to innermost node.
+
+-Say the path is '/head/title' then hash is calculated for 'title'.
+
+-Corresponding to the hash value a list of global_ids ,arranged in the increasing order of lineno, is stored.
+
+
+| Hash no |  global id list corresponding to the hash |
+|---------|-------------------------------------------|
+|    0    |                                           |
+|    1    |                                           |
+|    2    |   [id1,id2,id3,id4]                       |
+
+
+-Binary search is utilised  to  find ids, under a parent node, from this list.
