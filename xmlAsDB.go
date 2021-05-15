@@ -1472,8 +1472,8 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 
 					labelValueStr := ""
 
-					for index, label := range labels {
-						labelValueStr = labelValueStr + label + "=" + values[index] + ";"
+					for index2, label := range labels {
+						labelValueStr = labelValueStr + label + "=" + values[index2] + ";"
 					}
 					if path_matching {
 						//fmt.Printf("\npath matching %s", QueryPath)
