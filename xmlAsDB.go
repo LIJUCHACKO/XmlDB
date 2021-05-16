@@ -132,7 +132,7 @@ func suspectedLinenos(DB *Database, path string, lowerbound int, upperbound int)
 	SearchtillEnd := 0
 	index := len(pathParts) - 1
 	for {
-		if index <= 0 {
+		if index < 0 {
 			break
 		}
 		part := pathParts[index]
@@ -1460,7 +1460,6 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 
 	suspectedLineStarts, suspectedLineEnds := suspectedLinenos(DB, QueryPath, parent_nodeLine, parent_endline)
 	for index, start := range suspectedLineStarts {
-
 		if start >= parent_nodeLine && start <= parent_endline {
 			LineNo := start
 
