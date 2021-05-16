@@ -1548,7 +1548,7 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 				LineNo++
 			}
 		}
-		index++
+
 	}
 	if DB.Debug_enabled {
 		fmt.Printf("===LocateNode===\n")
