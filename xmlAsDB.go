@@ -1497,7 +1497,7 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 											all_satisfied = false
 										} else {
 											attributes := strings.Split(DB.global_attributes[LineNo], "||")
-
+											attrib_matching := false
 											for _, attrib := range attributes {
 												attrib = strings.TrimSpace(attrib)
 												if len(attrib) > 0 {
@@ -1506,13 +1506,19 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 														match, _ = regexp.MatchString(valueorAttribute, attrib)
 													} else {
 														match = (valueorAttribute == attrib)
+
 													}
-													if !match {
-														all_satisfied = false
+													if match {
+														attrib_matching = true
 													}
+
 												} else {
 
 												}
+											}
+											if !attrib_matching {
+
+												all_satisfied = false
 											}
 										}
 
