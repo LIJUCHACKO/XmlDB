@@ -1517,11 +1517,12 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 										}
 
 									} else {
-										valueorAttribute = ReplacewithHTMLSpecialEntities(valueorAttribute)
+
 										match := false
 										if isRegExp {
 											match, _ = regexp.MatchString(valueorAttribute, DB.global_values[LineNo])
 										} else {
+											valueorAttribute = ReplacewithHTMLSpecialEntities(valueorAttribute)
 											match = (valueorAttribute == DB.global_values[LineNo])
 										}
 										if !match {
