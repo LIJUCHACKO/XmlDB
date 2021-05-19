@@ -818,6 +818,18 @@ func parseAndLoadXml(DB *Database, content string) []int {
 		}
 	}
 
+	if len(strings.TrimSpace(content[lastindex:index])) > 0 {
+		fmt.Printf("xml is corrupt")
+		os.Exit(1)
+	}
+	if CommentStarted || xmldeclarationStarted || Comment2Started || CDATAStarted {
+		fmt.Printf("xml is corrupt")
+		os.Exit(1)
+	}
+	if len(strings.TrimSpace(nodeStart.String())) > 0 {
+		fmt.Printf("xml is corrupt")
+		os.Exit(1)
+	}
 	//fmt.Printf("\n %d  %d %d  %d", len(newlines), len(values), len(attributes), len(paths))
 	return nodes
 }
@@ -1021,7 +1033,8 @@ func update_nodevalue(DB *Database, nodeId int, new_value string) ([]int, error)
 	result := ""
 	if len(value) == 0 {
 		if strings.Contains(content, "/>") {
-			result = content[0:len(content)-3] + ">" + new_value + "</" + GetNodeName(DB, nodeId) + ">"
+			parts := strings.Split(content, "/>")
+			result = parts[0] + ">" + new_value + "</" + GetNodeName(DB, nodeId) + ">"
 
 		}
 	} else {
@@ -1054,7 +1067,7 @@ func UpdateAttributevalue(DB *Database, nodeId int, label string, value string) 
 	}
 	contentparts := strings.Split(content, ">")
 	contentparts0 := contentparts[0]
-	if strings.Contains(contentparts[0], label) {
+	if strings.Contains(contentparts[0], label+"=") {
 		oldvalue := GetNodeAttribute(DB, nodeId, label)
 		if DB.Debug_enabled {
 			fmt.Printf("replacing -%s -by- %s", label+"=\""+oldvalue+"\"", label+"=\""+value+"\"")
@@ -1733,4 +1746,37 @@ func GetNode(DB *Database, parent_nodeId int, QUERY_inp string) ([]int, []string
 
 	}
 	return ResultIds, labels_result
+}
+func NodeDebug(DB *Database, nodeId int) {
+	for DB.WriteLock {
+		fmt.Printf("Waiting for WriteLock-GetNodeContents\n")
+	}
+
+	i := NodeLine(DB, nodeId)
+	if i < 0 {
+		return
+	}
+	end := NodeEnd(DB, nodeId)
+	if DB.Debug_enabled {
+		fmt.Printf("getNodeContents :Fetching Contents from line %d to %d \n", i, end)
+	}
+	for {
+		if i >= end {
+			break
+		}
+		line := DB.global_dbLines[i]
+		nodeend := 0
+		nodebeg := 0
+		if DB.global_ids[i] >= 0 {
+			nodebeg = DB.nodeNoToLineno[DB.global_ids[i]]
+			nodeend = DB.nodeNoToLineno[DB.Nodeendlookup[DB.global_ids[i]]] + 1
+		}
+
+		fmt.Printf("\n path- %s  line- %s  nodeid-%d nodebeg-%d nodeend-%d", DB.global_paths[i], line, DB.global_ids[i], nodebeg, nodeend)
+		fmt.Printf("\n value- %s attribute-%s", DB.global_values[i], DB.global_attributes[i])
+		i++
+
+	}
+
+	return
 }
