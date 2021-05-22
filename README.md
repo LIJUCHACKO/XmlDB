@@ -117,7 +117,7 @@ Also see Example  :"https://github.com/LIJUCHACKO/ods2csv". I have used this lib
 
 ## Working/Software Design
 
-####INPUT(sample)
+#### INPUT(sample)
 
 ```
 <!DOCTYPE html>
@@ -129,7 +129,7 @@ Also see Example  :"https://github.com/LIJUCHACKO/ods2csv". I have used this lib
    </body>	
 </html>
 ```
-####After parsing- global variables are filled as shown
+#### After parsing- global variables are filled as shown
 
 | global_dbLines                         |   global_ids |  global_paths |  global_values         |  global_attributes      |
 |----------------------------------------|--------------|---------------|------------------------|-------------------------|
@@ -137,7 +137,7 @@ Also see Example  :"https://github.com/LIJUCHACKO/ods2csv". I have used this lib
 |` <head> `                              |   0          | /head         |                        |                         |
 |` <title>This is document title</title>`|   1          | /head/title   | This is document title |                         |
 | ` <\head> `                            |   2          | /head/~       |                        |                         |
-| `<body style="123" font="arial">`      |   3          | /body         |                        | style="123" font="arial"|
+| `<body style="123" font="arial">`      |   3          | /body         |                        | style="123"\|\| font="arial"|
 | `<h1>This is a heading</h1>  `         |   4          | /body/h1      |                        |                         |
 | `<p>Hello World!</p> `                 |   5          | /body/p       | This is a heading      |                         |
 | `</body>`                              |   6          | /body/~       | Hello World!           |                         |
@@ -146,7 +146,7 @@ Also see Example  :"https://github.com/LIJUCHACKO/ods2csv". I have used this lib
 Note:- If a new node is inserted in between, global_id '7' will be assigned to it. global_id will be unique and will be retained till the node is deleted.
 
 
-####nodeNoToLineno contains  line no for every global id.
+#### 'nodeNoToLineno' contains  line no for every global id.
 
 |   index/global_id|  nodeNoToLineno[index]|
 |------------------|-----------------------|
@@ -159,7 +159,7 @@ Note:- If a new node is inserted in between, global_id '7' will be assigned to i
 
 
 
-####Nodeendlookup contains global_id of the node end.
+#### 'Nodeendlookup' contains global_id of the node end.
 
 |   index/global_id|  Nodeendlookup[index]|
 |------------------|----------------------|
@@ -171,7 +171,7 @@ Note:- If a new node is inserted in between, global_id '7' will be assigned to i
 |     5            |    5                 |
 
 
-#####pathKeylookup  is for quick lookup for line nos corresponding to innermost node.
+##### 'pathKeylookup'  is for quick lookup for line nos corresponding to innermost node.
 
 -Say the path is '/head/title' then hash is calculated for 'title'.
 
