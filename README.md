@@ -12,7 +12,7 @@ This is a Go package to treat xml as a native database. You can access, modify o
 
     `xmlDB.Load_db(DB, "sample.html")`
 
-<u> Content of example.html</u>
+<u> Content of sample.html</u>
 
 ```
 <!DOCTYPE html>
@@ -66,7 +66,7 @@ This is document title
 7. Updating node
 
 ```
-	fmt.Printf("\n### Updating node value##\n")
+	fmt.Printf("\n### Updating node ##\n")
 	identifiedNodes, _ = xmlDB.GetNode(DB, 0, "head/title")
 	for _, node := range identifiedNodes {
 		newnodes := xmlDB.ReplaceNode(DB, node, "<title>test</title>")
@@ -87,7 +87,7 @@ This is document title
 ```
 <u>Output</u>
 ```
-### Updating node value##
+### Updating node ##
 After updation
 Warning :node  doesnot exist
 old node value- 
