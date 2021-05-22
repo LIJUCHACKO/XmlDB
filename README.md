@@ -59,11 +59,11 @@ This is a Go package to treat xml as a native database. You can access, modify o
 ```
 This is document title
 ```
-5. Searching using attribute value.
+6. Searching using attribute value.
 
     `identifiedNodes, _ = xmlDB.GetNode(DB, 0, "<x>*[style=\"123\"]/h1")`
 
-6. Updating node
+7. Updating node
 
 ```
 	fmt.Printf("\n### Updating node value##\n")
@@ -108,7 +108,7 @@ after adding Attribute-
 </body>
 ```
 
-7. Recursive search.
+8. Recursive search.
 
      `identifiedNodes, _ = xmlDB.GetNode(DB, 0, "../h1")`
 
