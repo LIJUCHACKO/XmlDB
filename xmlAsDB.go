@@ -1151,8 +1151,10 @@ func remove_Node(DB *Database, nodeId int) []int {
 	for i := startindex; i < end; i++ {
 		path := DB.global_paths[startindex]
 		path_parts := strings.Split(path, "/")
-		hashno := stringtono(DB, path_parts[len(path_parts)-1])
-		removeid_fromhashtable(DB, hashno, DB.global_ids[startindex])
+		if path_parts[len(path_parts)-1] != "~" {
+			hashno := stringtono(DB, path_parts[len(path_parts)-1])
+			removeid_fromhashtable(DB, hashno, DB.global_ids[startindex])
+		}
 		DB.global_dbLines = remove_string(DB.global_dbLines, startindex)
 		DB.deleted_ids = append(DB.deleted_ids, DB.global_ids[startindex])
 		removedids = append(removedids, DB.global_ids[startindex])
