@@ -28,7 +28,7 @@ func writeLines(DB *Database, path string) error {
 	return w.Flush()
 }
 
-func readLines(path string) (string, error) {
+func readLines(path string, MaxNooflines int) (string, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return "", err
@@ -38,6 +38,9 @@ func readLines(path string) (string, error) {
 	var content strings.Builder
 
 	scanner := bufio.NewScanner(file)
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, MaxNooflines*500) /*Assume one line on an average  contains 500 characters*/
+
 	for scanner.Scan() {
 		content.WriteString(scanner.Text())
 	}
@@ -947,7 +950,7 @@ func load_xmlstring(DB *Database, content string) {
 }
 func Load_db(DB *Database, filename string) error {
 	DB.filename = filename
-	lines, err := readLines(filename)
+	lines, err := readLines(filename, DB.MaxNooflines)
 	if err != nil {
 		fmt.Printf("Cannot load_db :Read : %s\n", err)
 		return err
@@ -1624,6 +1627,27 @@ func ChildNodes(DB *Database, nodeId int) []int {
 	return ResultIds
 }
 
+func NextNode(DB *Database, nodeId int) int {
+	LineNo := DB.nodeNoToLineno[nodeId]
+	if LineNo < 0 {
+		return -1
+	}
+	NodePath := DB.global_paths[LineNo]
+	nodeDepth := len(strings.Split(NodePath, "/"))
+	Node_end := DB.nodeNoToLineno[DB.Nodeendlookup[nodeId]] + 1
+	nextnodeid := DB.global_ids[Node_end]
+	nextNodePath := DB.global_paths[Node_end]
+	if DB.path[len(nextNodePath)-2:len(nextNodePath)] == "/~" {
+		return -1
+	}
+	nextnodeDepth := len(strings.Split(nextNodePath, "/"))
+	if nodeDepth == nextnodeDepth {
+		return nextnodeid
+	} else {
+		return -1
+	}
+
+}
 func GetNode(DB *Database, parent_nodeId int, QUERY_inp string) ([]int, []string) {
 	// ldld/dkdicmk/<xe>/kjk[]/lkl/
 	for DB.WriteLock {
