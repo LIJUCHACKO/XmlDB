@@ -1306,6 +1306,9 @@ func ReplaceNode(DB *Database, nodeId int, sub_xml string) ([]int, error) {
 		return []int{}, errors.New("xml content is not proper- aborting replacing")
 	}
 	startindex := NodeLine(DB, nodeId)
+	if startindex < 0 {
+		return []int{}, errors.New("Node doesnot exists")
+	}
 	rmids := remove_Node(DB, nodeId)
 	if len(rmids) > 0 {
 		nodes, err := insertAtLine(DB, startindex, sub_xml, -1)
@@ -1324,6 +1327,9 @@ func replaceNodeRetainid(DB *Database, nodeId int, sub_xml string) ([]int, error
 		return []int{}, errors.New("xml content is not proper- aborting replacing")
 	}
 	startindex := NodeLine(DB, nodeId)
+	if startindex < 0 {
+		return []int{}, errors.New("Node doesnot exists")
+	}
 	removed := remove_Node(DB, nodeId)
 	DB.deleted_ids = remove(DB.deleted_ids, len(DB.deleted_ids)-len(removed))
 	nodes, err := insertAtLine(DB, startindex, sub_xml, removed[0])
