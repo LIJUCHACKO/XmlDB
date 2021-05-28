@@ -23,7 +23,7 @@ func writeLines(DB *Database, path string) error {
 	for _, line := range DB.global_dbLines {
 		line = strings.ReplaceAll(line, "<nil:node>", "")
 		line = strings.ReplaceAll(line, "</nil:node>", "")
-		fmt.Fprintln(w, line+"\r")
+		fmt.Fprintln(w, line)
 	}
 	return w.Flush()
 }
