@@ -965,6 +965,7 @@ func Save_DB(DB *Database) {
 	}
 }
 func Load_dbcontent(DB *Database, xmllines []string) {
+	/* xmllines should not contain /n /r*/
 	var contentByte strings.Builder
 	for _, line := range xmllines {
 		contentByte.WriteString(line)
