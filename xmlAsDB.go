@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-//const maxInt = 9999999
+const SEGMENTSIZE = 2000
 
 // writeLines writes the lines to the given file.
 func writeLines(DB *Database, path string) error {
@@ -20,10 +20,13 @@ func writeLines(DB *Database, path string) error {
 	defer file.Close()
 
 	w := bufio.NewWriter(file)
-	for _, line := range DB.global_dbLines {
-		line = strings.ReplaceAll(line, "<nil:node>", "")
-		line = strings.ReplaceAll(line, "</nil:node>", "")
-		fmt.Fprintln(w, line)
+	for _, item := range DB.global_dbLines {
+		for _, line := range item {
+			line = strings.ReplaceAll(line, "<nil:node>", "")
+			line = strings.ReplaceAll(line, "</nil:node>", "")
+			fmt.Fprintln(w, line)
+
+		}
 	}
 	return w.Flush()
 }
@@ -80,10 +83,10 @@ type Database struct {
 	removeattribute          string
 	global_ids               []int
 	deleted_ids              []int
-	global_paths             []string
-	global_dbLines           []string
-	global_values            []string
-	global_attributes        []string
+	global_paths             [][]string
+	global_dbLines           [][]string
+	global_values            [][]string
+	global_attributes        [][]string
 	global_lineLastUniqueid  int
 	Debug_enabled            bool
 	nodeNoToLineno           []int
@@ -103,7 +106,7 @@ type Database struct {
 func updateNodenoLineMap(DB *Database, fromLine int) {
 	lineno := fromLine
 	for {
-		if lineno >= len(DB.global_dbLines) {
+		if lineno >= len(DB.global_ids) {
 			break
 		}
 		id := DB.global_ids[lineno]
@@ -157,7 +160,7 @@ func suspectedLinenos(DB *Database, path string, lowerbound int, upperbound int)
 	//fmt.Println(NodeNos)
 	if len(NodeNos) == 0 {
 		suspectedLineStarts = append(suspectedLineStarts, 0)
-		suspectedLineEnds = append(suspectedLineEnds, len(DB.global_dbLines))
+		suspectedLineEnds = append(suspectedLineEnds, len(DB.global_ids))
 
 		return suspectedLineStarts, suspectedLineEnds //1
 	} else {
@@ -448,6 +451,16 @@ func insert_string(a []string, index int, value string) []string {
 	return a
 }
 
+func getSegmenNoIndex(DB *Database, index int) (int, int) {
+	size := 0
+	for seg, item := range DB.global_dbLines {
+		if size+len(item) > index {
+			return seg, index - size
+		}
+		size = size + len(item)
+	}
+	return -1, -1
+}
 func formatxml(lines []string) []string {
 	newlines := []string{}
 	level := 0
@@ -494,10 +507,26 @@ func fill_DBdata(DB *Database, dbline string, value string, attribute string, No
 	unique_id := DB.global_lineLastUniqueid
 	if DB.startindex < 0 {
 		//fmt.Printf("\n%s %s %d %s %s", DB.path, dbline, unique_id, value, attribute)
-		DB.global_dbLines = append(DB.global_dbLines, dbline)
-		DB.global_values = append(DB.global_values, value)
-		DB.global_attributes = append(DB.global_attributes, attribute)
-		DB.global_paths = append(DB.global_paths, DB.path)
+		if len(DB.global_dbLines) == 0 {
+			DB.global_dbLines = append(DB.global_dbLines, []string{})
+			DB.global_values = append(DB.global_values, []string{})
+			DB.global_attributes = append(DB.global_attributes, []string{})
+			DB.global_paths = append(DB.global_paths, []string{})
+		}
+		lastsegment := len(DB.global_dbLines) - 1
+		if len(DB.global_dbLines[lastsegment]) >= SEGMENTSIZE {
+			DB.global_dbLines = append(DB.global_dbLines, []string{})
+			DB.global_values = append(DB.global_values, []string{})
+			DB.global_attributes = append(DB.global_attributes, []string{})
+			DB.global_paths = append(DB.global_paths, []string{})
+			lastsegment++
+		}
+
+		DB.global_dbLines[lastsegment] = append(DB.global_dbLines[lastsegment], dbline)
+		DB.global_values[lastsegment] = append(DB.global_values[lastsegment], value)
+		DB.global_attributes[lastsegment] = append(DB.global_attributes[lastsegment], attribute)
+		DB.global_paths[lastsegment] = append(DB.global_paths[lastsegment], DB.path)
+
 		DB.global_ids = append(DB.global_ids, unique_id)
 
 		DB.global_lineLastUniqueid++
@@ -521,11 +550,39 @@ func fill_DBdata(DB *Database, dbline string, value string, attribute string, No
 				}
 			}
 		}
-		DB.global_dbLines = insert_string(DB.global_dbLines, DB.startindex, dbline)
-		DB.global_values = insert_string(DB.global_values, DB.startindex, value)
-		DB.global_attributes = insert_string(DB.global_attributes, DB.startindex, attribute)
+		SegNo, index := getSegmenNoIndex(DB, DB.startindex)
+		DB.global_dbLines[SegNo] = insert_string(DB.global_dbLines[SegNo], index, dbline)
+		DB.global_values[SegNo] = insert_string(DB.global_values[SegNo], index, value)
+		DB.global_attributes[SegNo] = insert_string(DB.global_attributes[SegNo], index, attribute)
+		DB.global_paths[SegNo] = insert_string(DB.global_paths[SegNo], index, DB.path)
+
 		DB.global_ids = insert(DB.global_ids, DB.startindex, unique_id)
-		DB.global_paths = insert_string(DB.global_paths, DB.startindex, DB.path)
+
+		/*splitting segments*/
+		if len(DB.global_dbLines[SegNo]) >= SEGMENTSIZE*2 {
+
+			if SegNo < len(DB.global_dbLines)-1 {
+				DB.global_dbLines = append(DB.global_dbLines[:SegNo+2], DB.global_dbLines[SegNo+1:]...)          // index < len(a)
+				DB.global_values = append(DB.global_values[:SegNo+2], DB.global_values[SegNo+1:]...)             // index < len(a)
+				DB.global_attributes = append(DB.global_attributes[:SegNo+2], DB.global_attributes[SegNo+1:]...) // index < len(a)
+				DB.global_paths = append(DB.global_paths[:SegNo+2], DB.global_paths[SegNo+1:]...)                // index < len(a)                     // index < len(a)
+			} else {
+				DB.global_dbLines = append(DB.global_dbLines, []string{})
+				DB.global_values = append(DB.global_values, []string{})
+				DB.global_attributes = append(DB.global_attributes, []string{})
+				DB.global_paths = append(DB.global_paths, []string{})
+			}
+			DB.global_dbLines[SegNo+1] = DB.global_dbLines[SegNo][SEGMENTSIZE:]
+			DB.global_values[SegNo+1] = DB.global_values[SegNo][SEGMENTSIZE:]
+			DB.global_attributes[SegNo+1] = DB.global_attributes[SegNo][SEGMENTSIZE:]
+			DB.global_paths[SegNo+1] = DB.global_paths[SegNo][SEGMENTSIZE:]
+
+			DB.global_dbLines[SegNo] = DB.global_dbLines[SegNo][:SEGMENTSIZE]
+			DB.global_values[SegNo] = DB.global_values[SegNo][:SEGMENTSIZE]
+			DB.global_attributes[SegNo] = DB.global_attributes[SegNo][:SEGMENTSIZE]
+			DB.global_paths[SegNo] = DB.global_paths[SegNo][:SEGMENTSIZE]
+
+		}
 		if DB.Debug_enabled {
 			fmt.Printf("insertatline :Inserting New Node %d\n", unique_id)
 		}
@@ -869,6 +926,18 @@ func NodeEnd(DB *Database, nodeId int) int {
 	return lineno
 
 }
+func Dump_DB(DB *Database) string {
+	var final strings.Builder
+	for _, item := range DB.global_dbLines {
+		for _, line := range item {
+			line = strings.ReplaceAll(line, "<nil:node>", "")
+			line = strings.ReplaceAll(line, "</nil:node>", "")
+			final.WriteString(line)
+
+		}
+	}
+	return final.String()
+}
 func SaveAs_DB(DB *Database, filename string) {
 	for DB.WriteLock {
 		fmt.Printf("Waiting for WriteLock-Save_DB\n")
@@ -914,10 +983,10 @@ func load_xmlstring(DB *Database, content string) {
 	DB.retainid = -1
 	DB.pathIdStack_index = 0
 	DB.global_ids = make([]int, 0, DB.maxInt)
-	DB.global_paths = make([]string, 0, DB.maxInt)
-	DB.global_attributes = make([]string, 0, DB.maxInt)
-	DB.global_values = make([]string, 0, DB.maxInt)
-	DB.global_dbLines = make([]string, 0, DB.maxInt)
+	DB.global_paths = make([][]string, 0, 10)
+	DB.global_attributes = make([][]string, 0, 10)
+	DB.global_values = make([][]string, 0, 10)
+	DB.global_dbLines = make([][]string, 0, 10)
 	DB.global_lineLastUniqueid = 0
 	DB.removeattribute = ""
 	DB.reference_linenotoinsert = 0
@@ -933,18 +1002,22 @@ func load_xmlstring(DB *Database, content string) {
 	//fmt.Println(DB.global_ids)
 	if DB.Debug_enabled {
 		fmt.Printf("load_db :xml db loaded\n No of nodes-%d\n", DB.global_lineLastUniqueid)
-
-		for i, line := range DB.global_dbLines {
-			nodeend := 0
-			nodebeg := 0
-			if DB.global_ids[i] >= 0 {
-				nodebeg = DB.nodeNoToLineno[DB.global_ids[i]]
-				nodeend = DB.nodeNoToLineno[DB.Nodeendlookup[DB.global_ids[i]]] + 1
+		//var final strings.Builder
+		i := 0
+		for seg, item := range DB.global_dbLines {
+			for index, line := range item {
+				nodeend := 0
+				nodebeg := 0
+				if DB.global_ids[i] >= 0 {
+					nodebeg = DB.nodeNoToLineno[DB.global_ids[i]]
+					nodeend = DB.nodeNoToLineno[DB.Nodeendlookup[DB.global_ids[i]]] + 1
+				}
+				fmt.Printf("\n path- %s  line- %s  nodeid-%d nodebeg-%d nodeend-%d", DB.global_paths[seg][index], line, DB.global_ids[i], nodebeg, nodeend)
+				fmt.Printf("\n value- %s attribute-%s", DB.global_values[seg][index], DB.global_attributes[seg][index])
+				i++
 			}
-
-			fmt.Printf("\n path- %s  line- %s  nodeid-%d nodebeg-%d nodeend-%d", DB.global_paths[i], line, DB.global_ids[i], nodebeg, nodeend)
-			fmt.Printf("\n value- %s attribute-%s", DB.global_values[i], DB.global_attributes[i])
 		}
+
 	}
 
 }
@@ -968,7 +1041,8 @@ func GetNodeAttribute(DB *Database, nodeId int, label string) string {
 		fmt.Printf("Warning :node  doesnot exist\n")
 		return ""
 	}
-	attributes := strings.Split(DB.global_attributes[LineNo], "||")
+	SegNo, index := getSegmenNoIndex(DB, LineNo)
+	attributes := strings.Split(DB.global_attributes[SegNo][index], "||")
 	for _, attri := range attributes {
 		attri := strings.TrimSpace(attri)
 		LabelValue := strings.Split(attri, "=\"")
@@ -992,7 +1066,8 @@ func GetNodeValue(DB *Database, nodeId int) string {
 		fmt.Printf("Warning :node  doesnot exist\n")
 		return ""
 	}
-	return DB.global_values[lineno]
+	SegNo, index := getSegmenNoIndex(DB, lineno)
+	return DB.global_values[SegNo][index]
 }
 func GetNodeName(DB *Database, nodeId int) string {
 	for DB.WriteLock {
@@ -1003,7 +1078,8 @@ func GetNodeName(DB *Database, nodeId int) string {
 		fmt.Printf("Warning :node  doesnot exist\n")
 		return ""
 	}
-	path := DB.global_paths[lineno]
+	SegNo, index := getSegmenNoIndex(DB, lineno)
+	path := DB.global_paths[SegNo][index]
 	pathparts := strings.Split(path, "/")
 	return pathparts[len(pathparts)-1]
 }
@@ -1108,11 +1184,11 @@ func GetNodeContents(DB *Database, nodeId int) string {
 		fmt.Printf("getNodeContents :Fetching Contents from line %d to %d \n", beginning, end)
 	}
 	var lines []string
-	if (end - beginning) > 200 {
-		fmt.Printf("\n No of lines more than 200 \n ")
-		lines = DB.global_dbLines[beginning : beginning+200]
-	} else {
-		lines = DB.global_dbLines[beginning:end]
+	i := beginning
+	for i < end && i < beginning+200 {
+		SegNo, index := getSegmenNoIndex(DB, i)
+		lines = append(lines, DB.global_dbLines[SegNo][index])
+		i++
 	}
 
 	lines = formatxml(lines)
@@ -1149,20 +1225,23 @@ func remove_Node(DB *Database, nodeId int) []int {
 	DB.startindex = startindex
 	DB.WriteLock = true
 	for i := startindex; i < end; i++ {
-		path := DB.global_paths[startindex]
+		SegNo, index := getSegmenNoIndex(DB, startindex)
+		path := DB.global_paths[SegNo][index]
 		path_parts := strings.Split(path, "/")
 		if path_parts[len(path_parts)-1] != "~" {
 			hashno := stringtono(DB, path_parts[len(path_parts)-1])
 			removeid_fromhashtable(DB, hashno, DB.global_ids[startindex])
 		}
-		DB.global_dbLines = remove_string(DB.global_dbLines, startindex)
+
 		DB.deleted_ids = append(DB.deleted_ids, DB.global_ids[startindex])
 		removedids = append(removedids, DB.global_ids[startindex])
 		DB.nodeNoToLineno[DB.global_ids[startindex]] = -1
 		DB.global_ids = remove(DB.global_ids, startindex)
-		DB.global_paths = remove_string(DB.global_paths, startindex)
-		DB.global_values = remove_string(DB.global_values, startindex)
-		DB.global_attributes = remove_string(DB.global_attributes, startindex)
+
+		DB.global_dbLines[SegNo] = remove_string(DB.global_dbLines[SegNo], index)
+		DB.global_paths[SegNo] = remove_string(DB.global_paths[SegNo], index)
+		DB.global_values[SegNo] = remove_string(DB.global_values[SegNo], index)
+		DB.global_attributes[SegNo] = remove_string(DB.global_attributes[SegNo], index)
 	}
 
 	return removedids
@@ -1270,8 +1349,9 @@ func insertAtLine(DB *Database, lineno int, sub_xml string, retainid int) ([]int
 
 	DB.startindex = lineno
 	startindex_tmp := lineno
-	path := DB.global_paths[lineno-1]
-	if strings.Contains(DB.global_dbLines[lineno-1], "</") || strings.Contains(DB.global_dbLines[lineno-1], "/>") || strings.Contains(DB.global_dbLines[lineno-1], "<!") {
+	SegNo, index := getSegmenNoIndex(DB, lineno-1)
+	path := DB.global_paths[SegNo][index]
+	if strings.Contains(DB.global_dbLines[SegNo][index], "</") || strings.Contains(DB.global_dbLines[SegNo][index], "/>") || strings.Contains(DB.global_dbLines[SegNo][index], "<!") {
 		path_parts := strings.Split(path, "/")
 		path = path[0 : len(path)-len(path_parts[len(path_parts)-1])-1]
 	}
@@ -1406,7 +1486,8 @@ func LocateRequireParentdNode(DB *Database, parent_nodeLine int, RequiredPath st
 	if LineNo_inp < 0 || parent_nodeLine < 0 {
 		return -1
 	}
-	ParentPath := DB.global_paths[parent_nodeLine]
+	SegNo, index := getSegmenNoIndex(DB, parent_nodeLine)
+	ParentPath := DB.global_paths[SegNo][index]
 
 	suspectedLineStarts, _ := suspectedLinenos(DB, RequiredPath, parent_nodeLine, LineNo_inp+1)
 	if DB.Debug_enabled {
@@ -1430,9 +1511,10 @@ func LocateRequireParentdNode(DB *Database, parent_nodeLine int, RequiredPath st
 		}
 		i++
 	}
-	if len(DB.global_paths[requiredline]) >= len(ParentPath) {
+	SegNo, index = getSegmenNoIndex(DB, requiredline)
+	if len(DB.global_paths[SegNo][index]) >= len(ParentPath) {
 
-		_, _, stat := compare_path(DB.global_paths[requiredline], RequiredPath)
+		_, _, stat := compare_path(DB.global_paths[SegNo][index], RequiredPath)
 
 		if stat {
 			if DB.Debug_enabled {
@@ -1462,7 +1544,8 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 		return ResultIds, Label_Values
 	}
 	InsideParent := true
-	ParentPath := DB.global_paths[parent_nodeLine]
+	SegNo, index := getSegmenNoIndex(DB, parent_nodeLine)
+	ParentPath := DB.global_paths[SegNo][index]
 	if len(QUERY) > 0 {
 		QUERY = ParentPath + "/" + QUERY
 	} else {
@@ -1487,11 +1570,12 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 		if start >= parent_nodeLine && start <= parent_endline {
 			LineNo := start
 
-			for InsideParent && LineNo < len(DB.global_dbLines) && LineNo <= suspectedLineEnds[index] {
+			for InsideParent && LineNo < len(DB.global_ids) && LineNo <= suspectedLineEnds[index] {
 				//fmt.Printf("\nDB.global_paths[LineNo] %s ParentPath %s\n", DB.global_paths[LineNo], ParentPath)
-				if isParentPath(ParentPath, DB.global_paths[LineNo]) {
+				SegNo, index := getSegmenNoIndex(DB, LineNo)
+				if isParentPath(ParentPath, DB.global_paths[SegNo][index]) {
 
-					labels, values, path_matching := compare_path(DB.global_paths[LineNo], QueryPath)
+					labels, values, path_matching := compare_path(DB.global_paths[SegNo][index], QueryPath)
 
 					labelValueStr := ""
 
@@ -1516,10 +1600,10 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 
 									if strings.Contains(RegExp, "=\"") {
 
-										if len(strings.TrimSpace(DB.global_attributes[LineNo])) == 0 {
+										if len(strings.TrimSpace(DB.global_attributes[SegNo][index])) == 0 {
 											all_satisfied = false
 										} else {
-											attributes := strings.Split(DB.global_attributes[LineNo], "||")
+											attributes := strings.Split(DB.global_attributes[SegNo][index], "||")
 											attrib_matching := false
 											for _, attrib := range attributes {
 												attrib = strings.TrimSpace(attrib)
@@ -1549,10 +1633,10 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 
 										match := false
 										if isRegExp {
-											match, _ = regexp.MatchString(valueorAttribute, DB.global_values[LineNo])
+											match, _ = regexp.MatchString(valueorAttribute, DB.global_values[SegNo][index])
 										} else {
 											valueorAttribute = ReplacewithHTMLSpecialEntities(valueorAttribute)
-											match = (valueorAttribute == DB.global_values[LineNo])
+											match = (valueorAttribute == DB.global_values[SegNo][index])
 										}
 										if !match {
 											all_satisfied = false
@@ -1594,7 +1678,8 @@ func ParentNode(DB *Database, nodeId int) int {
 	if LineNo < 0 {
 		return ResultId
 	}
-	NodePath := DB.global_paths[LineNo]
+	SegNo, index := getSegmenNoIndex(DB, LineNo)
+	NodePath := DB.global_paths[SegNo][index]
 	parts := strings.Split(NodePath, "/")
 
 	RequiredPath := NodePath[0 : len(NodePath)-len(parts[len(parts)-1])-1]
@@ -1610,18 +1695,20 @@ func ChildNodes(DB *Database, nodeId int) []int {
 	if LineNo < 0 {
 		return ResultIds
 	}
-	NodePath := DB.global_paths[LineNo]
+	SegNo, index := getSegmenNoIndex(DB, LineNo)
+	NodePath := DB.global_paths[SegNo][index]
 	nodeDepth := len(strings.Split(NodePath, "/"))
 	Node_end := DB.nodeNoToLineno[DB.Nodeendlookup[nodeId]] + 1
 	InsideParent := true
 	LineNo++
 	for InsideParent && LineNo < Node_end {
+		SegNo, index := getSegmenNoIndex(DB, LineNo)
 		//fmt.Printf("\npath-%s ", DB.global_paths[LineNo])
-		if isParentPath(NodePath, DB.global_paths[LineNo]) {
-			if DB.global_paths[LineNo][len(DB.global_paths[LineNo])-2:] == "/~" {
+		if isParentPath(NodePath, DB.global_paths[SegNo][index]) {
+			if DB.global_paths[SegNo][index][len(DB.global_paths[SegNo][index])-2:] == "/~" {
 
 			} else {
-				if len(strings.Split(DB.global_paths[LineNo], "/")) == nodeDepth+1 {
+				if len(strings.Split(DB.global_paths[SegNo][index], "/")) == nodeDepth+1 {
 					ResultIds = append(ResultIds, DB.global_ids[LineNo])
 				}
 
@@ -1640,11 +1727,13 @@ func NextNode(DB *Database, nodeId int) int {
 	if LineNo < 0 {
 		return -1
 	}
-	NodePath := DB.global_paths[LineNo]
+	SegNo, index := getSegmenNoIndex(DB, LineNo)
+	NodePath := DB.global_paths[SegNo][index]
 	nodeDepth := len(strings.Split(NodePath, "/"))
 	Node_end := DB.nodeNoToLineno[DB.Nodeendlookup[nodeId]] + 1
 	nextnodeid := DB.global_ids[Node_end]
-	nextNodePath := DB.global_paths[Node_end]
+	SegNo, index = getSegmenNoIndex(DB, Node_end)
+	nextNodePath := DB.global_paths[SegNo][index]
 	if DB.path[len(nextNodePath)-2:len(nextNodePath)] == "/~" {
 		return -1
 	}
@@ -1767,7 +1856,8 @@ func GetNode(DB *Database, parent_nodeId int, QUERY_inp string) ([]int, []string
 				}
 			}
 			//fmt.Printf("ProcessQuery :parent_nodeLine %s\n", DB.global_paths[parent_nodeLine]+"/"+RequiredPathN)
-			ResultId := LocateRequireParentdNode(DB, parent_nodeLine, DB.global_paths[parent_nodeLine]+"/"+RequiredPathN, nodeLine)
+			SegNo, index := getSegmenNoIndex(DB, parent_nodeLine)
+			ResultId := LocateRequireParentdNode(DB, parent_nodeLine, DB.global_paths[SegNo][index]+"/"+RequiredPathN, nodeLine)
 			if ResultId > 0 {
 				if DB.Debug_enabled {
 					fmt.Printf("ProcessQuery :ResultId %d\n", ResultId)
@@ -1796,7 +1886,8 @@ func NodeDebug(DB *Database, nodeId int) {
 		if i >= end {
 			break
 		}
-		line := DB.global_dbLines[i]
+		SegNo, index := getSegmenNoIndex(DB, i)
+		line := DB.global_dbLines[SegNo][index]
 		nodeend := 0
 		nodebeg := 0
 		if DB.global_ids[i] >= 0 {
@@ -1804,8 +1895,9 @@ func NodeDebug(DB *Database, nodeId int) {
 			nodeend = DB.nodeNoToLineno[DB.Nodeendlookup[DB.global_ids[i]]] + 1
 		}
 
-		fmt.Printf("\n path- %s  line- %s  nodeid-%d nodebeg-%d nodeend-%d", DB.global_paths[i], line, DB.global_ids[i], nodebeg, nodeend)
-		fmt.Printf("\n value- %s attribute-%s", DB.global_values[i], DB.global_attributes[i])
+		fmt.Printf("\n path- %s  line- %s  nodeid-%d nodebeg-%d nodeend-%d", DB.global_paths[SegNo][index], line, DB.global_ids[i], nodebeg, nodeend)
+
+		fmt.Printf("\n value- %s attribute-%s", DB.global_values[SegNo][index], DB.global_attributes[SegNo][index])
 		i++
 
 	}
