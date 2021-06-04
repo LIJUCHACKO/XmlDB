@@ -105,6 +105,9 @@ type Database struct {
 
 func updateNodenoLineMap(DB *Database, fromLine int) {
 	lineno := fromLine
+	if lineno < 0 {
+		lineno = 0
+	}
 	for {
 		if lineno >= len(DB.global_ids) {
 			break
@@ -454,7 +457,7 @@ func insert_string(a []string, index int, value string) []string {
 func getSegmenNoIndex(DB *Database, index int) (int, int) {
 	size := 0
 	for seg, item := range DB.global_dbLines {
-		if size+len(item) > index {
+		if size+len(item) >= index {
 			return seg, index - size
 		}
 		size = size + len(item)
@@ -536,7 +539,7 @@ func fill_DBdata(DB *Database, dbline string, value string, attribute string, No
 		}
 	} else {
 
-		if DB.retainid > 0 {
+		if DB.retainid >= 0 {
 			unique_id = DB.retainid
 			DB.retainid = -1
 		} else {
@@ -550,6 +553,7 @@ func fill_DBdata(DB *Database, dbline string, value string, attribute string, No
 				}
 			}
 		}
+		//fmt.Printf("DB.startindex=%d", DB.startindex)
 		SegNo, index := getSegmenNoIndex(DB, DB.startindex)
 		DB.global_dbLines[SegNo] = insert_string(DB.global_dbLines[SegNo], index, dbline)
 		DB.global_values[SegNo] = insert_string(DB.global_values[SegNo], index, value)
@@ -1345,18 +1349,21 @@ func insertAtLine(DB *Database, lineno int, sub_xml string, retainid int) ([]int
 	DB.retainid = retainid
 	DB.removeattribute = ""
 	DB.pathIdStack_index = 0
-
-	DB.reference_linenotoinsert = lineno - 1
-
 	DB.startindex = lineno
 	startindex_tmp := lineno
-	SegNo, index := getSegmenNoIndex(DB, lineno-1)
-	path := DB.global_paths[SegNo][index]
-	if strings.Contains(DB.global_dbLines[SegNo][index], "</") || strings.Contains(DB.global_dbLines[SegNo][index], "/>") || strings.Contains(DB.global_dbLines[SegNo][index], "<!") {
-		path_parts := strings.Split(path, "/")
-		path = path[0 : len(path)-len(path_parts[len(path_parts)-1])-1]
+	if lineno > 0 {
+		DB.reference_linenotoinsert = lineno - 1
+		SegNo, index := getSegmenNoIndex(DB, lineno-1)
+		path := DB.global_paths[SegNo][index]
+		if strings.Contains(DB.global_dbLines[SegNo][index], "</") || strings.Contains(DB.global_dbLines[SegNo][index], "/>") || strings.Contains(DB.global_dbLines[SegNo][index], "<!") {
+			path_parts := strings.Split(path, "/")
+			path = path[0 : len(path)-len(path_parts[len(path_parts)-1])-1]
+		}
+		DB.path = path
+	} else {
+		DB.reference_linenotoinsert = 0
+		DB.path = ""
 	}
-	DB.path = path
 	newlines := strings.Split(sub_xml, "\n")
 	var contentByte strings.Builder
 	for _, line := range newlines {
@@ -1415,6 +1422,13 @@ func replaceNodeRetainid(DB *Database, nodeId int, sub_xml string) ([]int, error
 	DB.deleted_ids = remove(DB.deleted_ids, len(DB.deleted_ids)-len(removed))
 	nodes, err := insertAtLine(DB, startindex, sub_xml, removed[0])
 	return nodes, err
+}
+func IslowestNode(DB *Database, nodeId int) bool {
+	end := NodeEnd(DB, nodeId)
+	if (end - NodeLine(DB, nodeId)) == 1 {
+		return true
+	}
+	return false
 }
 func InserSubNode(DB *Database, nodeId int, sub_xml string) ([]int, error) {
 	for DB.WriteLock {
