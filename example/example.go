@@ -67,6 +67,8 @@ func main() {
 		fmt.Printf("\nafter updating Attribute-\n%s", xmlDB.GetNodeContents(DB, node))
 		xmlDB.UpdateAttributevalue(DB, node, "label", "value")
 		fmt.Printf("\nafter adding Attribute-\n%s", xmlDB.GetNodeContents(DB, node))
+		xmlDB.UpdateAttributevalue(DB, node, "font", "")
+		fmt.Printf("\nafter removing Attribute-\n%s", xmlDB.GetNodeContents(DB, node))
 
 	}
 	xmlDB.SaveAs_DB(DB, "sample_mod.html")
