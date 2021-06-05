@@ -154,7 +154,9 @@ func suspectedLinenos(DB *Database, path string, lowerbound int, upperbound int)
 			hashno := stringtono(DB, part)
 			from := find_indexhashtable(DB, hashno, lowerbound, false)
 			to := find_indexhashtable(DB, hashno, upperbound, true)
-			NodeNos = DB.pathKeylookup[hashno][from:to]
+			if from >= 0 && to >= 0 {
+				NodeNos = DB.pathKeylookup[hashno][from:to]
+			}
 			break
 		}
 		index--
@@ -271,6 +273,9 @@ func removeid_fromhashtable(DB *Database, hashno int, nodeId int) {
 	lineno := DB.nodeNoToLineno[nodeId]
 	LowLM := 0
 	UpLM := len(DB.pathKeylookup[hashno]) - 1
+	if UpLM < 0 {
+		return
+	}
 	MidLM := 0
 	index := -1
 	for {
@@ -307,6 +312,9 @@ func removeid_fromhashtable(DB *Database, hashno int, nodeId int) {
 func find_indexhashtable(DB *Database, hashno int, node_lineno int, roof bool) int {
 	LowLM := 0
 	UpLM := len(DB.pathKeylookup[hashno]) - 1
+	if UpLM < 0 {
+		return -1
+	}
 	MidLM := 0
 	index := -1
 	//node_lineno := DB.nodeNoToLineno[nodeId]
@@ -974,7 +982,16 @@ func Load_dbcontent(DB *Database, xmllines []string) {
 	for _, line := range xmllines {
 		contentByte.WriteString(line)
 	}
-	load_xmlstring(DB, contentByte.String())
+	text := contentByte.String()
+	if len(text) < 2000 {
+		if !validatexml(text) {
+			fmt.Println(text)
+			fmt.Println("Load_dbcontent-XML not valid ,DB not loaded")
+			return
+		}
+	}
+
+	load_xmlstring(DB, text)
 }
 func load_xmlstring(DB *Database, content string) {
 	if DB.MaxNooflines < 99999 {
@@ -1139,6 +1156,7 @@ func update_nodevalue(DB *Database, nodeId int, new_value string) ([]int, error)
 	return replacednodes, err
 }
 func UpdateAttributevalue(DB *Database, nodeId int, label string, value string) ([]int, error) {
+	value = strings.TrimSpace(value)
 	for DB.WriteLock {
 		fmt.Printf("Waiting for WriteLock-UpdateAttributevalue\n")
 	}
@@ -1156,9 +1174,16 @@ func UpdateAttributevalue(DB *Database, nodeId int, label string, value string) 
 		if DB.Debug_enabled {
 			fmt.Printf("replacing -%s -by- %s", label+"=\""+oldvalue+"\"", label+"=\""+value+"\"")
 		}
-		contentparts0 = strings.ReplaceAll(contentparts0, label+"=\""+oldvalue+"\"", label+"=\""+value+"\"")
+		if len(value) > 0 {
+			contentparts0 = strings.ReplaceAll(contentparts0, label+"=\""+oldvalue+"\"", label+"=\""+value+"\"")
+		} else {
+			contentparts0 = strings.ReplaceAll(contentparts0, label+"=\""+oldvalue+"\"", "")
+		}
+
 	} else {
-		contentparts0 = (contentparts0 + " " + label + "=\"" + value + "\"")
+		if len(value) > 0 {
+			contentparts0 = (contentparts0 + " " + label + "=\"" + value + "\"")
+		}
 	}
 	contentnew := contentparts0 + ">"
 	for i, part := range contentparts {
@@ -1173,6 +1198,37 @@ func UpdateAttributevalue(DB *Database, nodeId int, label string, value string) 
 	}
 
 	return replacednodes, err
+}
+func GetNodeContentRaw(DB *Database, nodeId int) string {
+	for DB.WriteLock {
+		fmt.Printf("Waiting for WriteLock-GetNodeContents\n")
+	}
+
+	Output := ""
+	beginning := NodeLine(DB, nodeId)
+	if beginning < 0 {
+		return Output
+	}
+	end := NodeEnd(DB, nodeId)
+	if DB.Debug_enabled {
+		fmt.Printf("getNodeContentsRaw :Fetching Contents from line %d to %d \n", beginning, end)
+	}
+	var lines []string
+	i := beginning
+	for i < end {
+		SegNo, index := getSegmenNoIndex(DB, i)
+		lines = append(lines, DB.global_dbLines[SegNo][index])
+		i++
+	}
+
+	lines = formatxml(lines)
+
+	for _, line := range lines {
+		//line = strings.ReplaceAll(line, "<nil:node>", "")
+		//line = strings.ReplaceAll(line, "</nil:node>", "")
+		Output = Output + line + "\n"
+	}
+	return Output
 }
 func GetNodeContents(DB *Database, nodeId int) string {
 	for DB.WriteLock {
@@ -1199,8 +1255,8 @@ func GetNodeContents(DB *Database, nodeId int) string {
 	lines = formatxml(lines)
 
 	for _, line := range lines {
-		//line = strings.ReplaceAll(line, "<nil:node>", "")
-		//line = strings.ReplaceAll(line, "</nil:node>", "")
+		line = strings.ReplaceAll(line, "<nil:node>", "")
+		line = strings.ReplaceAll(line, "</nil:node>", "")
 		Output = Output + line + "\n"
 	}
 	if (end - beginning) > 200 {
@@ -1335,12 +1391,16 @@ func validatexml(content string) bool {
 		}
 	}
 	if len(strings.TrimSpace(content[lastindex:index])) > 0 {
+		fmt.Println(content[lastindex:index])
 		return false
 	}
 	if CommentStarted || xmldeclarationStarted || Comment2Started || CDATAStarted {
+		fmt.Println("Comment/xmldeclaration/CDATA session not closed")
 		return false
 	}
 	if len(nodesnames) > 0 {
+		fmt.Println("Nodes not closed")
+		fmt.Println(nodesnames)
 		return false
 	}
 	return true
@@ -1690,6 +1750,9 @@ func ParentNode(DB *Database, nodeId int) int {
 	}
 	LineNo := DB.nodeNoToLineno[nodeId]
 	ResultId := -1
+	if nodeId < 0 {
+		return ResultId
+	}
 	if LineNo < 0 {
 		return ResultId
 	}
@@ -1707,6 +1770,9 @@ func ChildNodes(DB *Database, nodeId int) []int {
 	}
 	LineNo := DB.nodeNoToLineno[nodeId]
 	var ResultIds []int
+	if nodeId < 0 {
+		return ResultIds
+	}
 	if LineNo < 0 {
 		return ResultIds
 	}
