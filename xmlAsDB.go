@@ -1506,7 +1506,7 @@ func InserSubNode(DB *Database, nodeId int, sub_xml string) ([]int, error) {
 	end := NodeEnd(DB, nodeId)
 	if (end - NodeLine(DB, nodeId)) == 1 {
 		nodes, err := update_nodevalue(DB, nodeId, sub_xml)
-
+		nodes = nodes[1:]
 		return nodes, err
 	}
 	if end < 0 {
