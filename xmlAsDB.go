@@ -465,10 +465,13 @@ func insert_string(a []string, index int, value string) []string {
 func getSegmenNoIndex(DB *Database, index int) (int, int) {
 	size := 0
 	for seg, item := range DB.global_dbLines {
-		if size+len(item) >= index {
+		if size+len(item) > index {
 			return seg, index - size
 		}
 		size = size + len(item)
+	}
+	if size >= index {
+		return len(DB.global_dbLines) - 1, len(DB.global_dbLines[len(DB.global_dbLines)-1])
 	}
 	return -1, -1
 }
@@ -561,7 +564,6 @@ func fill_DBdata(DB *Database, dbline string, value string, attribute string, No
 				}
 			}
 		}
-		//fmt.Printf("DB.startindex=%d", DB.startindex)
 		SegNo, index := getSegmenNoIndex(DB, DB.startindex)
 		DB.global_dbLines[SegNo] = insert_string(DB.global_dbLines[SegNo], index, dbline)
 		DB.global_values[SegNo] = insert_string(DB.global_values[SegNo], index, value)
@@ -688,7 +690,7 @@ func parseAndLoadXml(DB *Database, content string) []int {
 					nodeStart.WriteString("</nil:node>")
 					if len(strings.TrimSpace(content[lastindex:index])) > 0 {
 						////
-						node := fill_DBdata(DB, nodeStart.String(), strings.TrimSpace(content[lastindex:index]), "", "nil:node", 2)
+						node := fill_DBdata(DB, nodeStart.String(), content[lastindex:index], "", "nil:node", 2)
 						if DB.startindex >= 0 {
 							nodes = append(nodes, node)
 						}
@@ -723,7 +725,7 @@ func parseAndLoadXml(DB *Database, content string) []int {
 					nodeEnded = true
 					if nodeStart.Len() > 0 {
 						nodeStart.WriteString(content[lastindex:index])
-						valuebuffer.WriteString(strings.TrimSpace(content[lastindex:index]))
+						valuebuffer.WriteString(content[lastindex:index])
 						lastindex = index
 					} else {
 						nodeStart.WriteString("<nil:node>")
@@ -731,7 +733,7 @@ func parseAndLoadXml(DB *Database, content string) []int {
 						nodeStart.WriteString("</nil:node>")
 						if len(strings.TrimSpace(content[lastindex:index])) > 0 {
 							////
-							node := fill_DBdata(DB, nodeStart.String(), strings.TrimSpace(content[lastindex:index]), "", "nil:node", 2)
+							node := fill_DBdata(DB, nodeStart.String(), content[lastindex:index], "", "nil:node", 2)
 							if DB.startindex >= 0 {
 								nodes = append(nodes, node)
 							}
@@ -1711,7 +1713,7 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 											match, _ = regexp.MatchString(valueorAttribute, DB.global_values[SegNo][index])
 										} else {
 											valueorAttribute = ReplacewithHTMLSpecialEntities(valueorAttribute)
-											match = (valueorAttribute == DB.global_values[SegNo][index])
+											match = (valueorAttribute == strings.TrimSpace(DB.global_values[SegNo][index]))
 										}
 										if !match {
 											all_satisfied = false
