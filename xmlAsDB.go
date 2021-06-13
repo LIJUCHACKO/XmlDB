@@ -391,10 +391,6 @@ func insertid_intohashtable(DB *Database, hashno int, nodeId int) {
 	MidLM := 0
 	index := -1
 
-	if DB.nodeNoToLineno[DB.pathKeylookup[hashno][LowLM]] == DB.nodeNoToLineno[DB.pathKeylookup[hashno][UpLM]] {
-		DB.pathKeylookup[hashno] = append(DB.pathKeylookup[hashno], nodeId)
-		return
-	}
 	for {
 		MidLM = int((LowLM + UpLM) / 2)
 		if lineno >= DB.nodeNoToLineno[DB.pathKeylookup[hashno][LowLM]] && lineno < DB.nodeNoToLineno[DB.pathKeylookup[hashno][MidLM]] {
@@ -1417,6 +1413,9 @@ func insertAtLine(DB *Database, lineno int, sub_xml string, retainid int) ([]int
 		DB.reference_linenotoinsert = lineno - 1
 		SegNo, index := getSegmenNoIndex(DB, lineno-1)
 		path := DB.global_paths[SegNo][index]
+		if path[len(path)-2:len(path)] == "/~" {
+			path = path[0 : len(path)-2]
+		}
 		if strings.Contains(DB.global_dbLines[SegNo][index], "</") || strings.Contains(DB.global_dbLines[SegNo][index], "/>") || strings.Contains(DB.global_dbLines[SegNo][index], "<!") {
 			path_parts := strings.Split(path, "/")
 			path = path[0 : len(path)-len(path_parts[len(path_parts)-1])-1]
