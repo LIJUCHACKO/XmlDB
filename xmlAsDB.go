@@ -1122,11 +1122,6 @@ func UpdateNodevalue(DB *Database, nodeId int, new_value string) ([]int, error) 
 		fmt.Printf("Waiting for WriteLock-UpdateNodevalue\n")
 	}
 
-	if strings.Contains(new_value, "<") || strings.Contains(new_value, ">") {
-		fmt.Printf("Error :Value contains xml\n")
-
-		return []int{}, errors.New("Value contains xml")
-	}
 	nodes, err := update_nodevalue(DB, nodeId, ReplacewithHTMLSpecialEntities(new_value))
 
 	return nodes, err
