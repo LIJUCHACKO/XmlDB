@@ -204,6 +204,15 @@ func compare_path(current_path string, reference_path string) ([]string, []strin
 			break
 		}
 		if strings.Contains(ref_pathParts[ref_pathPartindex], "<") && strings.Contains(ref_pathParts[ref_pathPartindex], ">") {
+			if skipoccured {
+				//no of remaining parts are matching then
+				if (len(cur_pathParts) - cur_pathPartindex) > (len(ref_pathParts) - ref_pathPartindex) {
+					cur_pathPartindex++
+					continue
+				} else {
+
+				}
+			}
 			label = append(label, ref_pathParts[ref_pathPartindex])
 			value = append(value, cur_pathParts[cur_pathPartindex])
 			cur_pathPartindex++
@@ -390,7 +399,12 @@ func insertid_intohashtable(DB *Database, hashno int, nodeId int) {
 	UpLM := len(DB.pathKeylookup[hashno]) - 1
 	MidLM := 0
 	index := -1
-
+	if DB.nodeNoToLineno[DB.pathKeylookup[hashno][LowLM]] == DB.nodeNoToLineno[DB.pathKeylookup[hashno][UpLM]] {
+		if DB.nodeNoToLineno[DB.pathKeylookup[hashno][LowLM]] == lineno {
+			DB.pathKeylookup[hashno] = append(DB.pathKeylookup[hashno], nodeId)
+			return
+		}
+	}
 	for {
 		MidLM = int((LowLM + UpLM) / 2)
 		if lineno >= DB.nodeNoToLineno[DB.pathKeylookup[hashno][LowLM]] && lineno < DB.nodeNoToLineno[DB.pathKeylookup[hashno][MidLM]] {
