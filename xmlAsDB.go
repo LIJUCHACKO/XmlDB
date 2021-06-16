@@ -1836,6 +1836,46 @@ func NextNode(DB *Database, nodeId int) int {
 	}
 
 }
+
+func separateValue(pathpart string) (string, string) {
+	i := strings.Index(pathpart, "[")
+	path := pathpart
+	value := ""
+	if i > -1 {
+		path = pathpart[0:i]
+		value = pathpart[i+1 : len(pathpart)-1]
+	}
+
+	return path, value
+}
+
+func preparePathparts(path string) []string {
+	result := []string{}
+	i := strings.Index(path, "]/")
+	for i > -1 {
+		result = append(result, path[0:i+1])
+		path = path[i+2:]
+		i = strings.Index(path, "]/")
+	}
+	result = append(result, path)
+	return result
+}
+
+func pathwithoutvalue(path string) string {
+	output := ""
+	items := preparePathparts(path)
+	for _, item := range items {
+		pathpart, _ := separateValue(item)
+		if len(output) == 0 {
+			output = pathpart
+		} else {
+			output = output + "/" + pathpart
+		}
+
+	}
+	return output
+}
+
 func GetNode(DB *Database, parent_nodeId int, QUERY_inp string) ([]int, []string) {
 	// ldld/dkdicmk/<xe>/kjk[]/lkl/
 	for DB.WriteLock {
@@ -1846,35 +1886,17 @@ func GetNode(DB *Database, parent_nodeId int, QUERY_inp string) ([]int, []string
 		fmt.Printf("==Process Query===\n")
 		fmt.Printf("ProcessQuery :QUERY_inp- %s\n", QUERY_inp)
 	}
-	RequiredPath := QUERY_inp
-	if strings.Contains(QUERY_inp, "*") {
-		QUERY_Parts := strings.Split(QUERY_inp, "*")
+	RequiredPath := pathwithoutvalue(QUERY_inp)
+	if strings.Contains(RequiredPath, "*") {
+		QUERY_Parts := strings.Split(RequiredPath, "*")
 		RequiredPath = QUERY_Parts[0]
 	}
 
-	RequiredPath_final := ""
-	req_parts := strings.Split(RequiredPath, "]")
-	for _, req_part := range req_parts {
-		String_Value := strings.Split(req_part, "[")
-		RequiredPath_final = RequiredPath_final + String_Value[0]
-	}
-	RequiredPath = RequiredPath_final
-
-	finalPath := ""
-	finalPath_parts := strings.Split(QUERY_inp, "]")
-	for _, path_part := range finalPath_parts {
-		String_Value := strings.Split(path_part, "[")
-		finalPath = finalPath + String_Value[0]
-	}
-	finalPath = strings.ReplaceAll(finalPath, "*", "")
-	//fmt.Printf("ProcessQuery :finalPath- %s\n", finalPath)
-	QUERY := strings.ReplaceAll(QUERY_inp, "*", "")
 	if DB.Debug_enabled {
-		fmt.Printf("ProcessQuery :QUERY- %s\n", QUERY)
+		fmt.Printf("ProcessQuery :QUERY- %s\n", QUERY_inp)
 		fmt.Printf("ProcessQuery :RequiredPath- %s\n", RequiredPath)
 
 	}
-	parts := strings.Split(QUERY, "]")
 	var labels_result []string
 	var final_nodesLineNo []int
 	parent_nodeLine := NodeLine(DB, parent_nodeId)
@@ -1883,15 +1905,10 @@ func GetNode(DB *Database, parent_nodeId int, QUERY_inp string) ([]int, []string
 	}
 	final_nodesLineNo = append(final_nodesLineNo, parent_nodeLine)
 	labels_result = append(labels_result, "")
+	parts := preparePathparts(QUERY_inp)
 	for _, part := range parts {
-		String_Value := strings.Split(part, "[")
-		QUERYSTR := part
-		RegExp := ""
-		if len(String_Value) > 1 {
-			QUERYSTR = String_Value[0]
-			RegExp = String_Value[1]
-		}
-
+		QUERYSTR, RegExp := separateValue(part)
+		QUERYSTR = strings.ReplaceAll(QUERYSTR, "*", "")
 		if len(part) > 0 {
 			var nextnodesLineNo []int
 			var nextlabels []string
