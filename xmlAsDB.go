@@ -1128,22 +1128,24 @@ func UpdateNodevalue(DB *Database, nodeId int, new_value string) ([]int, error) 
 }
 
 func update_nodevalue(DB *Database, nodeId int, new_value string) ([]int, error) {
-	if (NodeEnd(DB, nodeId) - NodeLine(DB, nodeId)) > 1 {
+	Nooflines := (NodeEnd(DB, nodeId) - NodeLine(DB, nodeId))
+	if Nooflines > 2 {
 		fmt.Printf("Error :Cannot update value- Node contains subnodes\n")
 		return []int{}, errors.New("Cannot update value- Node contains subnodes")
 	}
 	content := GetNodeContents(DB, nodeId)
+	content = strings.ReplaceAll(content, "\n", "-")
+	content = strings.ReplaceAll(content, "><", ">-<")
 	if len(content) == 0 {
 		fmt.Printf("Warning :node  doesnot exist\n")
 		return []int{}, errors.New("node  doesnot exist")
 	}
 	value := GetNodeValue(DB, nodeId)
 	result := ""
-	if len(value) == 0 {
+	if len(value) == 0 && Nooflines == 1 {
 		if strings.Contains(content, "/>") {
 			parts := strings.Split(content, "/>")
 			result = parts[0] + ">" + new_value + "</" + GetNodeName(DB, nodeId) + ">"
-
 		}
 	} else {
 		parts := strings.Split(content, ">")
