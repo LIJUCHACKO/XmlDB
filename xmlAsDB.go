@@ -1531,6 +1531,105 @@ func IslowestNode(DB *Database, nodeId int) bool {
 	}
 	return false
 }
+func CutPasteAsSubNode(DB *Database, UnderId int, nodeId int) error {
+	previousparentid := ParentNode(DB, nodeId)
+	if previousparentid == -1 {
+		fmt.Println("Node doesnot exists")
+		return errors.New("Node doesnot exists")
+	}
+	fmt.Printf("\nnodeid %d parentid %d DB.nodeNoToLineno[nodeId] %d\n", nodeId, previousparentid, DB.nodeNoToLineno[nodeId])
+	pSegNo, pindex := getSegmenNoIndex(DB, NodeLine(DB, previousparentid))
+	previousparentpath := DB.global_paths[pSegNo][pindex]
+
+	ToNodeend := NodeEnd(DB, UnderId)
+	if ToNodeend == -1 {
+		fmt.Println("New Parent Node doesnot exists")
+		return errors.New("New Parent Node doesnot exists")
+	}
+	NewParentNodename := GetNodeName(DB, UnderId)
+	NewParentNodeisEmpty := false
+	insertLine := ToNodeend - 1
+	SegNop, indexp := getSegmenNoIndex(DB, insertLine)
+	if (ToNodeend - NodeLine(DB, UnderId)) == 1 {
+		if strings.Contains(DB.global_dbLines[SegNop][indexp], "/>") {
+			NewParentNodeisEmpty = true
+			DB.global_dbLines[SegNop][indexp] = strings.ReplaceAll(DB.global_dbLines[SegNop][indexp], "/>", ">")
+		} else {
+			fmt.Println(" Node is a lowest node , not a nil node")
+			return errors.New(" Node is a lowest node , not a nil node")
+		}
+
+	}
+	//prepare initial path
+	if NewParentNodeisEmpty {
+		SegNop, indexp = getSegmenNoIndex(DB, insertLine)
+	} else {
+		SegNop, indexp = getSegmenNoIndex(DB, insertLine-1)
+	}
+
+	newparentpath := DB.global_paths[SegNop][indexp]
+	if newparentpath[len(newparentpath)-2:len(newparentpath)] == "/~" {
+		newparentpath = newparentpath[0 : len(newparentpath)-2]
+	}
+	if strings.Contains(DB.global_dbLines[SegNop][indexp], "</") || strings.Contains(DB.global_dbLines[SegNop][indexp], "/>") || strings.Contains(DB.global_dbLines[SegNop][indexp], "<!") {
+		path_parts := strings.Split(newparentpath, "/")
+		newparentpath = newparentpath[0 : len(newparentpath)-len(path_parts[len(path_parts)-1])-1]
+	}
+	//Paste to new location
+	Line := NodeLine(DB, nodeId)
+	end := NodeEnd(DB, nodeId)
+	if NewParentNodeisEmpty {
+		insertLine++
+	}
+	for Line < end {
+		SegNo, index := getSegmenNoIndex(DB, Line)
+		DB.path = newparentpath + strings.ReplaceAll(DB.global_paths[SegNo][index], previousparentpath, "")
+
+		newSegNo, newindex := getSegmenNoIndex(DB, insertLine)
+		DB.global_dbLines[newSegNo] = insert_string(DB.global_dbLines[newSegNo], newindex, DB.global_dbLines[SegNo][index])
+		DB.global_values[newSegNo] = insert_string(DB.global_values[newSegNo], newindex, DB.global_values[SegNo][index])
+		DB.global_attributes[newSegNo] = insert_string(DB.global_attributes[newSegNo], newindex, DB.global_attributes[SegNo][index])
+		DB.global_paths[newSegNo] = insert_string(DB.global_paths[newSegNo], newindex, DB.path)
+		DB.global_ids = insert(DB.global_ids, insertLine, DB.global_ids[Line])
+		insertLine++
+
+		Line++
+	}
+	if NewParentNodeisEmpty {
+
+		newSegNo, newindex := getSegmenNoIndex(DB, insertLine)
+		DB.global_dbLines[newSegNo] = insert_string(DB.global_dbLines[newSegNo], newindex, "</"+NewParentNodename+">")
+		DB.global_values[newSegNo] = insert_string(DB.global_values[newSegNo], newindex, "")
+		DB.global_attributes[newSegNo] = insert_string(DB.global_attributes[newSegNo], newindex, "")
+		DB.global_paths[newSegNo] = insert_string(DB.global_paths[newSegNo], newindex, newparentpath+"/~")
+
+		DB.global_ids = insert(DB.global_ids, insertLine, DB.global_lineLastUniqueid)
+		DB.Nodeendlookup[UnderId] = DB.global_lineLastUniqueid
+		DB.global_lineLastUniqueid++
+		if DB.global_lineLastUniqueid >= DB.maxInt {
+			fmt.Printf("load_db: Total no. of Uniqueid>= DB.MaxNooflines, Please increase DB.MaxNooflines before loading db")
+			os.Exit(1)
+		}
+	}
+	//remove from old location
+	Line = NodeLine(DB, nodeId)
+	startindex := Line
+	SegNo, index := getSegmenNoIndex(DB, startindex)
+	for Line < end {
+
+		DB.global_ids = remove(DB.global_ids, startindex)
+
+		DB.global_dbLines[SegNo] = remove_string(DB.global_dbLines[SegNo], index)
+		DB.global_paths[SegNo] = remove_string(DB.global_paths[SegNo], index)
+		DB.global_values[SegNo] = remove_string(DB.global_values[SegNo], index)
+		DB.global_attributes[SegNo] = remove_string(DB.global_attributes[SegNo], index)
+		Line++
+
+	}
+	updateNodenoLineMap(DB, 0)
+	DB.startindex = -1
+	return nil
+}
 func InserSubNode(DB *Database, nodeId int, sub_xml string) ([]int, error) {
 	for DB.WriteLock {
 		fmt.Printf("Waiting for WriteLock-InserSubNode\n")
@@ -1802,7 +1901,7 @@ func ParentNode(DB *Database, nodeId int) int {
 	parts := strings.Split(NodePath, "/")
 
 	RequiredPath := NodePath[0 : len(NodePath)-len(parts[len(parts)-1])-1]
-	return LocateRequireParentdNode(DB, 0, RequiredPath, LineNo)
+	return LocateRequireParentdNode(DB, NodeLine(DB, 0), RequiredPath, LineNo)
 }
 
 func ChildNodes(DB *Database, nodeId int) []int {
