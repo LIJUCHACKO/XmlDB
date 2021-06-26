@@ -1169,14 +1169,22 @@ func UpdateAttributevalue(DB *Database, nodeId int, label string, value string) 
 	for DB.WriteLock {
 		fmt.Printf("Waiting for WriteLock-UpdateAttributevalue\n")
 	}
-
-	content := GetNodeContents(DB, nodeId)
-	if len(content) == 0 {
+	beginning := NodeLine(DB, nodeId)
+	if beginning < 0 {
 		fmt.Printf("Warning :node  doesnot exist\n")
 
 		return []int{}, errors.New("node  doesnot exist")
 	}
-	contentparts := strings.Split(content, ">")
+	SegNo, index := getSegmenNoIndex(DB, beginning)
+	content := DB.global_dbLines[SegNo][index]
+	NodeWithoutValue := strings.Contains(content, "/>")
+	contentparts := []string{}
+	if NodeWithoutValue {
+		contentparts = strings.Split(content, "/>")
+	} else {
+		contentparts = strings.Split(content, ">")
+	}
+
 	contentparts0 := contentparts[0]
 	if strings.Contains(contentparts[0], label+"=") {
 		oldvalue := GetNodeAttribute(DB, nodeId, label)
@@ -1194,19 +1202,40 @@ func UpdateAttributevalue(DB *Database, nodeId int, label string, value string) 
 			contentparts0 = (contentparts0 + " " + label + "=\"" + value + "\"")
 		}
 	}
-	contentnew := contentparts0 + ">"
+	contentnew := ""
+	if NodeWithoutValue {
+		contentnew = contentparts0 + "/>"
+	} else {
+		contentnew = contentparts0 + ">"
+	}
+
 	for i, part := range contentparts {
 		if i > 0 && len(strings.TrimSpace(part)) > 0 {
 			contentnew = contentnew + part + ">"
 		}
 	}
-	replacednodes, err := replaceNodeRetainid(DB, nodeId, contentnew)
+	DB.global_dbLines[SegNo][index] = contentnew
+	parts := strings.Split(strings.TrimSpace(contentparts0), " ")
+	var attributebuffer strings.Builder
+	for partind, part := range parts {
+		if partind > 0 {
+			if len(strings.TrimSpace(part)) > 0 {
+				if attributebuffer.Len() > 1 {
+					attributebuffer.WriteString("||")
+				}
+				attributebuffer.WriteString(strings.TrimSpace(part))
+			}
+		} else {
+		}
+	}
+	DB.global_attributes[SegNo][index] = attributebuffer.String()
 	if DB.Debug_enabled {
 		fmt.Printf("UpdateNodevalue :Updating node %d\n", nodeId)
 		fmt.Printf("%s\n", GetNodeContents(DB, nodeId))
 	}
-
-	return replacednodes, err
+	replacednodes := []int{}
+	replacednodes = append(replacednodes, nodeId)
+	return replacednodes, nil
 }
 func GetNodeContentRaw(DB *Database, nodeId int) string {
 	for DB.WriteLock {
