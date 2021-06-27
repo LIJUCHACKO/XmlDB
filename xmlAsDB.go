@@ -1533,7 +1533,7 @@ func IslowestNode(DB *Database, nodeId int) bool {
 }
 func CutPasteAsSubNode(DB *Database, UnderId int, nodeId int) error {
 	for DB.WriteLock {
-		fmt.Printf("Waiting for WriteLock-ReplaceNode\n")
+		fmt.Printf("Waiting for WriteLock-CutPasteAsSubNode\n")
 	}
 	previousparentid := ParentNode(DB, nodeId)
 	if previousparentid == -1 {
