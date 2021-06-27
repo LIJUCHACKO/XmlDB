@@ -1532,6 +1532,9 @@ func IslowestNode(DB *Database, nodeId int) bool {
 	return false
 }
 func CutPasteAsSubNode(DB *Database, UnderId int, nodeId int) error {
+	for DB.WriteLock {
+		fmt.Printf("Waiting for WriteLock-ReplaceNode\n")
+	}
 	previousparentid := ParentNode(DB, nodeId)
 	if previousparentid == -1 {
 		fmt.Println("Node doesnot exists")
@@ -1540,6 +1543,34 @@ func CutPasteAsSubNode(DB *Database, UnderId int, nodeId int) error {
 	fmt.Printf("\nnodeid %d parentid %d DB.nodeNoToLineno[nodeId] %d\n", nodeId, previousparentid, DB.nodeNoToLineno[nodeId])
 	pSegNo, pindex := getSegmenNoIndex(DB, NodeLine(DB, previousparentid))
 	previousparentpath := DB.global_paths[pSegNo][pindex]
+	//remove from old location
+	Line := NodeLine(DB, nodeId)
+	end := NodeEnd(DB, nodeId)
+	startindex := Line
+
+	DB_global_ids := []int{}
+	DB_global_dbLines := []string{}
+	DB_global_paths := []string{}
+	DB_global_values := []string{}
+	DB_global_attributes := []string{}
+	SegNo, index := getSegmenNoIndex(DB, startindex)
+	DB.WriteLock = true
+	for Line < end {
+		DB_global_ids = append(DB_global_ids, DB.global_ids[startindex])
+		DB.global_ids = remove(DB.global_ids, startindex)
+
+		DB_global_dbLines = append(DB_global_dbLines, DB.global_dbLines[SegNo][index])
+		DB.global_dbLines[SegNo] = remove_string(DB.global_dbLines[SegNo], index)
+		DB_global_paths = append(DB_global_paths, DB.global_paths[SegNo][index])
+		DB.global_paths[SegNo] = remove_string(DB.global_paths[SegNo], index)
+		DB_global_values = append(DB_global_values, DB.global_values[SegNo][index])
+		DB.global_values[SegNo] = remove_string(DB.global_values[SegNo], index)
+		DB_global_attributes = append(DB_global_attributes, DB.global_attributes[SegNo][index])
+		DB.global_attributes[SegNo] = remove_string(DB.global_attributes[SegNo], index)
+		Line++
+
+	}
+	updateNodenoLineMap(DB, 0)
 
 	ToNodeend := NodeEnd(DB, UnderId)
 	if ToNodeend == -1 {
@@ -1576,21 +1607,21 @@ func CutPasteAsSubNode(DB *Database, UnderId int, nodeId int) error {
 		newparentpath = newparentpath[0 : len(newparentpath)-len(path_parts[len(path_parts)-1])-1]
 	}
 	//Paste to new location
-	Line := NodeLine(DB, nodeId)
-	end := NodeEnd(DB, nodeId)
+	Line = 0
 	if NewParentNodeisEmpty {
 		insertLine++
 	}
-	for Line < end {
-		SegNo, index := getSegmenNoIndex(DB, Line)
-		DB.path = newparentpath + strings.ReplaceAll(DB.global_paths[SegNo][index], previousparentpath, "")
+	DB.WriteLock = true
+	for Line < len(DB_global_dbLines) {
+		//SegNo, index := getSegmenNoIndex(DB, Line)
+		DB.path = newparentpath + strings.ReplaceAll(DB_global_paths[Line], previousparentpath, "")
 
 		newSegNo, newindex := getSegmenNoIndex(DB, insertLine)
-		DB.global_dbLines[newSegNo] = insert_string(DB.global_dbLines[newSegNo], newindex, DB.global_dbLines[SegNo][index])
-		DB.global_values[newSegNo] = insert_string(DB.global_values[newSegNo], newindex, DB.global_values[SegNo][index])
-		DB.global_attributes[newSegNo] = insert_string(DB.global_attributes[newSegNo], newindex, DB.global_attributes[SegNo][index])
+		DB.global_dbLines[newSegNo] = insert_string(DB.global_dbLines[newSegNo], newindex, DB_global_dbLines[Line])
+		DB.global_values[newSegNo] = insert_string(DB.global_values[newSegNo], newindex, DB_global_values[Line])
+		DB.global_attributes[newSegNo] = insert_string(DB.global_attributes[newSegNo], newindex, DB_global_attributes[Line])
 		DB.global_paths[newSegNo] = insert_string(DB.global_paths[newSegNo], newindex, DB.path)
-		DB.global_ids = insert(DB.global_ids, insertLine, DB.global_ids[Line])
+		DB.global_ids = insert(DB.global_ids, insertLine, DB_global_ids[Line])
 		insertLine++
 
 		Line++
@@ -1611,22 +1642,8 @@ func CutPasteAsSubNode(DB *Database, UnderId int, nodeId int) error {
 			os.Exit(1)
 		}
 	}
-	//remove from old location
-	Line = NodeLine(DB, nodeId)
-	startindex := Line
-	SegNo, index := getSegmenNoIndex(DB, startindex)
-	for Line < end {
-
-		DB.global_ids = remove(DB.global_ids, startindex)
-
-		DB.global_dbLines[SegNo] = remove_string(DB.global_dbLines[SegNo], index)
-		DB.global_paths[SegNo] = remove_string(DB.global_paths[SegNo], index)
-		DB.global_values[SegNo] = remove_string(DB.global_values[SegNo], index)
-		DB.global_attributes[SegNo] = remove_string(DB.global_attributes[SegNo], index)
-		Line++
-
-	}
 	updateNodenoLineMap(DB, 0)
+
 	DB.startindex = -1
 	return nil
 }
