@@ -1242,41 +1242,35 @@ func GetNodeContentRaw(DB *Database, nodeId int) string {
 		fmt.Printf("Waiting for WriteLock-GetNodeContents\n")
 	}
 
-	Output := ""
+	var Output strings.Builder
 	beginning := NodeLine(DB, nodeId)
 	if beginning < 0 {
-		return Output
+		return Output.String()
 	}
 	end := NodeEnd(DB, nodeId)
 	if DB.Debug_enabled {
 		fmt.Printf("getNodeContentsRaw :Fetching Contents from line %d to %d \n", beginning, end)
 	}
-	var lines []string
 	i := beginning
 	for i < end {
 		SegNo, index := getSegmenNoIndex(DB, i)
-		lines = append(lines, DB.global_dbLines[SegNo][index])
+		//lines = append(lines, DB.global_dbLines[SegNo][index])
+		Output.WriteString(DB.global_dbLines[SegNo][index])
+		Output.WriteString("\n")
 		i++
 	}
 
-	lines = formatxml(lines)
-
-	for _, line := range lines {
-		//line = strings.ReplaceAll(line, "<nil:node>", "")
-		//line = strings.ReplaceAll(line, "</nil:node>", "")
-		Output = Output + line + "\n"
-	}
-	return Output
+	return Output.String()
 }
 func GetNodeContents(DB *Database, nodeId int) string {
 	for DB.WriteLock {
 		fmt.Printf("Waiting for WriteLock-GetNodeContents\n")
 	}
 
-	Output := ""
+	var Output strings.Builder
 	beginning := NodeLine(DB, nodeId)
 	if beginning < 0 {
-		return Output
+		return Output.String()
 	}
 	end := NodeEnd(DB, nodeId)
 	if DB.Debug_enabled {
@@ -1295,12 +1289,13 @@ func GetNodeContents(DB *Database, nodeId int) string {
 	for _, line := range lines {
 		line = strings.ReplaceAll(line, "<nil:node>", "")
 		line = strings.ReplaceAll(line, "</nil:node>", "")
-		Output = Output + line + "\n"
+		Output.WriteString(line)
+		Output.WriteString("\n")
 	}
 	if (end - beginning) > 200 {
-		Output = Output + "\n .....Remaining lines are not printed......\n "
+		Output.WriteString("\n .....Remaining lines are not printed......\n ")
 	}
-	return Output
+	return Output.String()
 }
 func RemoveNode(DB *Database, nodeId int) []int {
 	for DB.WriteLock {
@@ -1312,6 +1307,42 @@ func RemoveNode(DB *Database, nodeId int) []int {
 	updateNodenoLineMap(DB, DB.startindex)
 	return nodes
 }
+
+func remove_Lines(DB *Database, start int, end int) {
+	//            *        *
+	//   ---------=========--------
+	DB.global_ids = append(DB.global_ids[:start], DB.global_ids[end:]...)
+	startSegNo, startIndex := getSegmenNoIndex(DB, start)
+	endSegNo, endIndex := getSegmenNoIndex(DB, end)
+	if startSegNo == endSegNo {
+		//with in segment
+		DB.global_dbLines[startSegNo] = append(DB.global_dbLines[startSegNo][:startIndex], DB.global_dbLines[startSegNo][endIndex:]...)
+		DB.global_paths[startSegNo] = append(DB.global_paths[startSegNo][:startIndex], DB.global_paths[startSegNo][endIndex:]...)
+		DB.global_values[startSegNo] = append(DB.global_values[startSegNo][:startIndex], DB.global_values[startSegNo][endIndex:]...)
+		DB.global_attributes[startSegNo] = append(DB.global_attributes[startSegNo][:startIndex], DB.global_attributes[startSegNo][endIndex:]...)
+	} else {
+		DB.global_dbLines[startSegNo] = DB.global_dbLines[startSegNo][:startIndex]
+		DB.global_paths[startSegNo] = DB.global_paths[startSegNo][:startIndex]
+		DB.global_values[startSegNo] = DB.global_values[startSegNo][:startIndex]
+		DB.global_attributes[startSegNo] = DB.global_attributes[startSegNo][:startIndex]
+
+		DB.global_dbLines[endSegNo] = DB.global_dbLines[endSegNo][endIndex:]
+		DB.global_paths[endSegNo] = DB.global_paths[endSegNo][endIndex:]
+		DB.global_values[endSegNo] = DB.global_values[endSegNo][endIndex:]
+		DB.global_attributes[endSegNo] = DB.global_attributes[endSegNo][endIndex:]
+
+		//remove in between segments
+		if endSegNo > (startSegNo + 1) {
+			DB.global_dbLines = append(DB.global_dbLines[:startSegNo+1], DB.global_dbLines[endSegNo:]...)
+			DB.global_paths = append(DB.global_paths[:startSegNo+1], DB.global_paths[endSegNo:]...)
+			DB.global_values = append(DB.global_values[:startSegNo+1], DB.global_values[endSegNo:]...)
+			DB.global_attributes = append(DB.global_attributes[:startSegNo+1], DB.global_attributes[endSegNo:]...)
+		}
+
+	}
+
+}
+
 func remove_Node(DB *Database, nodeId int) []int {
 
 	if DB.Debug_enabled {
@@ -1323,28 +1354,24 @@ func remove_Node(DB *Database, nodeId int) []int {
 	var removedids []int
 	DB.startindex = startindex
 	DB.WriteLock = true
-	for i := startindex; i < end; i++ {
-		SegNo, index := getSegmenNoIndex(DB, startindex)
+	for ind := startindex; ind < end; ind++ {
+		SegNo, index := getSegmenNoIndex(DB, ind)
 		path := DB.global_paths[SegNo][index]
 		path_parts := strings.Split(path, "/")
 		if path_parts[len(path_parts)-1] != "~" {
 			hashno := stringtono(DB, path_parts[len(path_parts)-1])
-			removeid_fromhashtable(DB, hashno, DB.global_ids[startindex])
+			removeid_fromhashtable(DB, hashno, DB.global_ids[ind])
 		}
 
-		DB.deleted_ids = append(DB.deleted_ids, DB.global_ids[startindex])
-		removedids = append(removedids, DB.global_ids[startindex])
-		DB.nodeNoToLineno[DB.global_ids[startindex]] = -1
-		DB.global_ids = remove(DB.global_ids, startindex)
+		DB.deleted_ids = append(DB.deleted_ids, DB.global_ids[ind])
+		removedids = append(removedids, DB.global_ids[ind])
+		DB.nodeNoToLineno[DB.global_ids[ind]] = -1
 
-		DB.global_dbLines[SegNo] = remove_string(DB.global_dbLines[SegNo], index)
-		DB.global_paths[SegNo] = remove_string(DB.global_paths[SegNo], index)
-		DB.global_values[SegNo] = remove_string(DB.global_values[SegNo], index)
-		DB.global_attributes[SegNo] = remove_string(DB.global_attributes[SegNo], index)
 	}
-
+	remove_Lines(DB, startindex, end)
 	return removedids
 }
+
 func validatexml(content string) bool {
 	nodesnames := []string{}
 	nodeEnded := false
@@ -1540,7 +1567,7 @@ func CutPasteAsSubNode(DB *Database, UnderId int, nodeId int) error {
 		fmt.Println("Node doesnot exists")
 		return errors.New("Node doesnot exists")
 	}
-	fmt.Printf("\nnodeid %d parentid %d DB.nodeNoToLineno[nodeId] %d\n", nodeId, previousparentid, DB.nodeNoToLineno[nodeId])
+	//fmt.Printf("\nnodeid %d parentid %d DB.nodeNoToLineno[nodeId] %d\n", nodeId, previousparentid, DB.nodeNoToLineno[nodeId])
 	pSegNo, pindex := getSegmenNoIndex(DB, NodeLine(DB, previousparentid))
 	previousparentpath := DB.global_paths[pSegNo][pindex]
 	//remove from old location
