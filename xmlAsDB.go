@@ -686,7 +686,7 @@ func parseAndLoadXml(DB *Database, content string) []int {
 				if content[index+1] != '/' {
 					if nodeStart.Len() > 0 {
 						//////
-						node := fill_DBdata(DB, nodeStart.String(), valuebuffer.String(), attributebuffer.String(), NodeName, 1)
+						node := fill_DBdata(DB, nodeStart.String(), valuebuffer.String(), strings.ReplaceAll(attributebuffer.String(), "\"\"", "\""), NodeName, 1)
 						if DB.startindex >= 0 {
 							nodes = append(nodes, node)
 						}
@@ -766,7 +766,7 @@ func parseAndLoadXml(DB *Database, content string) []int {
 					lastindex = index + 1
 					if len(strings.TrimSpace(buffer)) > 0 {
 						////
-						node := fill_DBdata(DB, buffer, valuebuffer.String(), attributebuffer.String(), "!COMMENT!", 2)
+						node := fill_DBdata(DB, buffer, valuebuffer.String(), strings.ReplaceAll(attributebuffer.String(), "\"\"", "\""), "!COMMENT!", 2)
 						if DB.startindex >= 0 {
 							nodes = append(nodes, node)
 						}
@@ -782,7 +782,7 @@ func parseAndLoadXml(DB *Database, content string) []int {
 					lastindex = index + 1
 					if len(strings.TrimSpace(buffer)) > 0 {
 						////
-						node := fill_DBdata(DB, buffer, valuebuffer.String(), attributebuffer.String(), "!CDATA!", 2)
+						node := fill_DBdata(DB, buffer, valuebuffer.String(), strings.ReplaceAll(attributebuffer.String(), "\"\"", "\""), "!CDATA!", 2)
 						if DB.startindex >= 0 {
 							nodes = append(nodes, node)
 						}
@@ -800,7 +800,7 @@ func parseAndLoadXml(DB *Database, content string) []int {
 					lastindex = index + 1
 					if len(strings.TrimSpace(buffer)) > 0 {
 						////
-						node := fill_DBdata(DB, buffer, valuebuffer.String(), attributebuffer.String(), "!XMLDECL!", 2)
+						node := fill_DBdata(DB, buffer, valuebuffer.String(), strings.ReplaceAll(attributebuffer.String(), "\"\"", "\""), "!XMLDECL!", 2)
 						if DB.startindex >= 0 {
 							nodes = append(nodes, node)
 						}
@@ -815,7 +815,7 @@ func parseAndLoadXml(DB *Database, content string) []int {
 				lastindex = index + 1
 				if len(strings.TrimSpace(buffer)) > 0 {
 					///
-					node := fill_DBdata(DB, buffer, valuebuffer.String(), attributebuffer.String(), "!COMMENT2!", 2)
+					node := fill_DBdata(DB, buffer, valuebuffer.String(), strings.ReplaceAll(attributebuffer.String(), "\"\"", "\""), "!COMMENT2!", 2)
 					if DB.startindex >= 0 {
 						nodes = append(nodes, node)
 					}
@@ -829,21 +829,26 @@ func parseAndLoadXml(DB *Database, content string) []int {
 				if content[index-1] == '/' {
 					//if comparestringBackward(line, "/>", index) {
 					nodeStart.WriteString(content[lastindex : index+1])
-					parts := strings.Split(strings.TrimSpace(content[lastindex+1:index-1]), " ")
+					parts := strings.Split(strings.TrimSpace(content[lastindex+1:index-1]), "\" ")
 					for partind, part := range parts {
 						if partind > 0 {
 							if len(strings.TrimSpace(part)) > 0 {
 								if attributebuffer.Len() > 1 {
 									attributebuffer.WriteString("||")
 								}
-								attributebuffer.WriteString(strings.TrimSpace(part))
+								attributebuffer.WriteString(strings.TrimSpace(part) + "\"")
 							}
 						} else {
+							subparts := strings.Split(part, " ")
+							if len(subparts) > 1 {
+								attributebuffer.WriteString(strings.TrimSpace(subparts[1]) + "\"")
+							}
+							NodeName = subparts[0]
 						}
 					}
 					lastindex = index + 1
 					///
-					node := fill_DBdata(DB, nodeStart.String(), valuebuffer.String(), attributebuffer.String(), parts[0], 2)
+					node := fill_DBdata(DB, nodeStart.String(), valuebuffer.String(), strings.ReplaceAll(attributebuffer.String(), "\"\"", "\""), NodeName, 2)
 					if DB.startindex >= 0 {
 						nodes = append(nodes, node)
 					}
@@ -859,12 +864,12 @@ func parseAndLoadXml(DB *Database, content string) []int {
 						///
 						if nodeStart.Len() > 0 {
 							nodeStart.WriteString(content[lastindex : index+1])
-							node := fill_DBdata(DB, nodeStart.String(), valuebuffer.String(), attributebuffer.String(), strings.TrimSpace(content[lastindex+2:index]), 2)
+							node := fill_DBdata(DB, nodeStart.String(), valuebuffer.String(), strings.ReplaceAll(attributebuffer.String(), "\"\"", "\""), strings.TrimSpace(content[lastindex+2:index]), 2)
 							if DB.startindex >= 0 {
 								nodes = append(nodes, node)
 							}
 						} else {
-							node := fill_DBdata(DB, content[lastindex:index+1], valuebuffer.String(), attributebuffer.String(), strings.TrimSpace(content[lastindex+2:index]), 3)
+							node := fill_DBdata(DB, content[lastindex:index+1], valuebuffer.String(), strings.ReplaceAll(attributebuffer.String(), "\"\"", "\""), strings.TrimSpace(content[lastindex+2:index]), 3)
 							if DB.startindex >= 0 {
 								nodes = append(nodes, node)
 							}
@@ -878,17 +883,21 @@ func parseAndLoadXml(DB *Database, content string) []int {
 						nodeEnded = false
 					} else {
 						nodeStart.WriteString(content[lastindex : index+1])
-						parts := strings.Split(strings.TrimSpace(content[lastindex+1:index]), " ")
+						parts := strings.Split(strings.TrimSpace(content[lastindex+1:index]), "\" ")
 						for partind, part := range parts {
 							if partind > 0 {
 								if len(strings.TrimSpace(part)) > 0 {
 									if attributebuffer.Len() > 1 {
 										attributebuffer.WriteString("||")
 									}
-									attributebuffer.WriteString(strings.TrimSpace(part))
+									attributebuffer.WriteString(strings.TrimSpace(part) + "\"")
 								}
 							} else {
-								NodeName = part
+								subparts := strings.Split(part, " ")
+								if len(subparts) > 1 {
+									attributebuffer.WriteString(strings.TrimSpace(subparts[1]) + "\"")
+								}
+								NodeName = subparts[0]
 							}
 						}
 					}
@@ -1065,7 +1074,30 @@ func Load_db(DB *Database, filename string) error {
 	load_xmlstring(DB, lines)
 	return nil
 }
+func GetAllNodeAttributes(DB *Database, nodeId int) ([]string, []string) {
+	for DB.WriteLock {
+		fmt.Printf("Waiting for WriteLock-GetNodeAttribute\n")
+	}
+	var labels []string
+	var values []string
+	LineNo := DB.nodeNoToLineno[nodeId]
+	if LineNo < 0 {
+		fmt.Printf("Warning :node  doesnot exist\n")
+		return labels, values
+	}
 
+	SegNo, index := getSegmenNoIndex(DB, LineNo)
+	attributes := strings.Split(DB.global_attributes[SegNo][index], "||")
+	for _, attri := range attributes {
+		attri := strings.TrimSpace(attri)
+		LabelValue := strings.Split(attri, "=\"")
+		if len(LabelValue) >= 2 {
+			labels = append(labels, LabelValue[0])
+			values = append(values, LabelValue[1][:len(LabelValue[1])-1])
+		}
+	}
+	return labels, values
+}
 func GetNodeAttribute(DB *Database, nodeId int, label string) string {
 	for DB.WriteLock {
 		fmt.Printf("Waiting for WriteLock-GetNodeAttribute\n")
@@ -1215,7 +1247,7 @@ func UpdateAttributevalue(DB *Database, nodeId int, label string, value string) 
 		}
 	}
 	DB.global_dbLines[SegNo][index] = contentnew
-	parts := strings.Split(strings.TrimSpace(contentparts0), " ")
+	parts := strings.Split(strings.TrimSpace(contentparts0), "\" ")
 	var attributebuffer strings.Builder
 	for partind, part := range parts {
 		if partind > 0 {
@@ -1223,12 +1255,17 @@ func UpdateAttributevalue(DB *Database, nodeId int, label string, value string) 
 				if attributebuffer.Len() > 1 {
 					attributebuffer.WriteString("||")
 				}
-				attributebuffer.WriteString(strings.TrimSpace(part))
+				attributebuffer.WriteString(strings.TrimSpace(part) + "\"")
 			}
 		} else {
+			subparts := strings.Split(part, " ")
+			if len(subparts) > 1 {
+				attributebuffer.WriteString(strings.TrimSpace(subparts[1]) + "\"")
+			}
 		}
+
 	}
-	DB.global_attributes[SegNo][index] = attributebuffer.String()
+	DB.global_attributes[SegNo][index] = strings.ReplaceAll(attributebuffer.String(), "\"\"", "\"")
 	if DB.Debug_enabled {
 		fmt.Printf("UpdateNodevalue :Updating node %d\n", nodeId)
 		fmt.Printf("%s\n", GetNodeContents(DB, nodeId))
