@@ -100,6 +100,7 @@ type Database struct {
 	path                     string
 	MaxNooflines             int
 	maxInt                   int
+	maxHashValue             int
 	WriteLock                bool
 }
 
@@ -124,10 +125,10 @@ func updateNodenoLineMap(DB *Database, fromLine int) {
 func stringtono(DB *Database, line string) int {
 	total := 0
 	for i, ch := range line {
-		total = total + int(ch)*i
+		total = total + (total<<5)+ int(ch)*i
 	}
-	if total > DB.maxInt {
-		total = total - DB.maxInt
+	if total >= DB.maxHashValue {
+		total = total % DB.maxHashValue
 	}
 	return total
 }
@@ -1020,7 +1021,8 @@ func load_xmlstring(DB *Database, content string) {
 	}
 	DB.maxInt = DB.MaxNooflines
 	DB.nodeNoToLineno = make([]int, DB.maxInt)
-	DB.pathKeylookup = make([][]int, DB.maxInt)
+	DB.maxHashValue=97343
+	DB.pathKeylookup = make([][]int, DB.maxHashValue)
 	DB.Nodeendlookup = make([]int, DB.maxInt)
 	DB.startindex = -1
 	DB.retainid = -1
