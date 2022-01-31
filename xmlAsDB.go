@@ -126,8 +126,6 @@ func stringtono(DB *Database, line string) int {
 	total := 0
 	for i, ch := range line {
 		total = total + (total<<5)+ int(ch)*i
-	}
-	if total >= DB.maxHashValue {
 		total = total % DB.maxHashValue
 	}
 	return total

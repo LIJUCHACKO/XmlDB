@@ -15,6 +15,8 @@ func main() {
 	var DB *xmlDB.Database = new(xmlDB.Database)
 	DB.Debug_enabled = false
 	xmlDB.Load_db(DB, "sample.html")
+	xmlDB.NodeDebug(DB, 0)
+
 	fmt.Printf("\n###Identifying Nodes using Query##")
 	identifiedNodes, _ := xmlDB.GetNode(DB, 0, "head*/title[This is document title]")
 	for _, node := range identifiedNodes {
@@ -71,6 +73,17 @@ func main() {
 		fmt.Printf("\nafter removing Attribute-\n%s", xmlDB.GetNodeContents(DB, node))
 
 	}
+	fmt.Printf("before")
+	xmlDB.NodeDebug(DB, 0)
+	identifiedNodest, _ := xmlDB.GetNode(DB, 0, "head")
+	Nodetomove := identifiedNodest[0]
+	identifiedNodesp, _ := xmlDB.GetNode(DB, 0, "body")
+	fmt.Printf("\nidentifiedNodesp[0] %d, Nodetomove %d ParentNode(DB, Nodetomove) %d\n", identifiedNodesp[0], Nodetomove, xmlDB.ParentNode(DB, Nodetomove))
+
+	xmlDB.CutPasteAsSubNode(DB, identifiedNodesp[0], Nodetomove)
+	fmt.Printf("after")
+	xmlDB.NodeDebug(DB, 0)
+
 	xmlDB.SaveAs_DB(DB, "sample_mod.html")
 
 }
