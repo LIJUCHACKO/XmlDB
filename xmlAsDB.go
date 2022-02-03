@@ -758,7 +758,7 @@ func parseAndLoadXml(DB *Database, content string) []int {
 		}
 		if content[index] == '>' {
 			if CommentStarted {
-				if content[index-1] == '-' {
+				if ((content[index-1] == '-') && (content[index-2] == '-')) {
 					//comparestringBackward(line, "->")
 					CommentStarted = false
 					buffer := content[lastindex : index+1]
@@ -776,7 +776,7 @@ func parseAndLoadXml(DB *Database, content string) []int {
 				}
 			} else if CDATAStarted {
 				//comparestringBackward(line, "]]>")
-				if content[index-1] == ']' {
+				if ((content[index-1] == ']') && (content[index-2] == ']')) {
 					buffer := content[lastindex : index+1]
 					lastindex = index + 1
 					if len(strings.TrimSpace(buffer)) > 0 {
@@ -1448,12 +1448,12 @@ func validatexml(content string) bool {
 		}
 		if content[index] == '>' {
 			if CommentStarted {
-				if content[index-1] == '-' {
+				if ((content[index-1] == '-') && (content[index-2] == '-')) {
 					CommentStarted = false
 					lastindex = index + 1
 				}
 			} else if CDATAStarted {
-				if content[index-1] == ']' {
+				if ((content[index-1] == ']') && (content[index-2] == ']')) {
 					lastindex = index + 1
 					CDATAStarted = false
 				}
