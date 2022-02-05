@@ -621,6 +621,7 @@ func fill_DBdata(DB *Database, dbline string, value string, attribute string, No
 	if unique_id >= 0 {
 		if mode < 3 {
 			Node_hash := stringtono(DB, NodeName)
+			DB.nodeNoToLineno[unique_id] = DB.reference_linenotoinsert
 			insertid_intohashtable(DB, Node_hash, unique_id)
 		}
 		if mode == 1 {
@@ -759,7 +760,7 @@ func parseAndLoadXml(DB *Database, content string) []int {
 		if content[index] == '>' {
 			if CommentStarted {
 				if ((content[index-1] == '-') && (content[index-2] == '-')) {
-					//comparestringBackward(line, "->")
+					//comparestringBackward(line, "-->")
 					CommentStarted = false
 					buffer := content[lastindex : index+1]
 					lastindex = index + 1
@@ -922,6 +923,10 @@ func parseAndLoadXml(DB *Database, content string) []int {
 		fmt.Printf("xml is corrupt")
 		os.Exit(1)
 	}
+	if DB.Nodeendlookup[0] < 0 {
+        fmt.Printf("xml is corrupt")
+		os.Exit(1)
+    }
 	//fmt.Printf("\n %d  %d %d  %d", len(newlines), len(values), len(attributes), len(paths))
 	return nodes
 }
