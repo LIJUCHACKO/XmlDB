@@ -125,7 +125,7 @@ func updateNodenoLineMap(DB *Database, fromLine int) {
 func stringtono(DB *Database, line string) int {
 	total := 0
 	for i, ch := range line {
-		total = total + (total<<5)+ int(ch)*i
+		total = total + (total << 5) + int(ch)*i
 		total = total % DB.maxHashValue
 	}
 	return total
@@ -759,7 +759,7 @@ func parseAndLoadXml(DB *Database, content string) []int {
 		}
 		if content[index] == '>' {
 			if CommentStarted {
-				if ((content[index-1] == '-') && (content[index-2] == '-')) {
+				if (content[index-1] == '-') && (content[index-2] == '-') {
 					//comparestringBackward(line, "-->")
 					CommentStarted = false
 					buffer := content[lastindex : index+1]
@@ -777,7 +777,7 @@ func parseAndLoadXml(DB *Database, content string) []int {
 				}
 			} else if CDATAStarted {
 				//comparestringBackward(line, "]]>")
-				if ((content[index-1] == ']') && (content[index-2] == ']')) {
+				if (content[index-1] == ']') && (content[index-2] == ']') {
 					buffer := content[lastindex : index+1]
 					lastindex = index + 1
 					if len(strings.TrimSpace(buffer)) > 0 {
@@ -924,9 +924,9 @@ func parseAndLoadXml(DB *Database, content string) []int {
 		os.Exit(1)
 	}
 	if DB.Nodeendlookup[0] < 0 {
-        fmt.Printf("xml is corrupt")
+		fmt.Printf("xml is corrupt")
 		os.Exit(1)
-    }
+	}
 	//fmt.Printf("\n %d  %d %d  %d", len(newlines), len(values), len(attributes), len(paths))
 	return nodes
 }
@@ -1024,7 +1024,7 @@ func load_xmlstring(DB *Database, content string) {
 	}
 	DB.maxInt = DB.MaxNooflines
 	DB.nodeNoToLineno = make([]int, DB.maxInt)
-	DB.maxHashValue=97343
+	DB.maxHashValue = 97343
 	DB.pathKeylookup = make([][]int, DB.maxHashValue)
 	DB.Nodeendlookup = make([]int, DB.maxInt)
 	DB.startindex = -1
@@ -1116,14 +1116,8 @@ func GetNodeAttribute(DB *Database, nodeId int, label string) string {
 	attributes := strings.Split(DB.global_attributes[SegNo][index], "||")
 	for _, attri := range attributes {
 		attri := strings.TrimSpace(attri)
-		LabelValue := strings.Split(attri, "=\"")
-		if len(LabelValue) >= 2 {
-			if LabelValue[0] == strings.TrimSpace(label) {
-				Value := LabelValue[1]
-				//removing end quotes
-				//fmt.Printf("Value %s\n", Value)
-				return Value[:len(Value)-1]
-			}
+		if attri[0:len(label)+1] == label+"=" {
+			return attri[len(label)+2 : len(attri)-1]
 		}
 	}
 	return ""
@@ -1453,12 +1447,12 @@ func validatexml(content string) bool {
 		}
 		if content[index] == '>' {
 			if CommentStarted {
-				if ((content[index-1] == '-') && (content[index-2] == '-')) {
+				if (content[index-1] == '-') && (content[index-2] == '-') {
 					CommentStarted = false
 					lastindex = index + 1
 				}
 			} else if CDATAStarted {
-				if ((content[index-1] == ']') && (content[index-2] == ']')) {
+				if (content[index-1] == ']') && (content[index-2] == ']') {
 					lastindex = index + 1
 					CDATAStarted = false
 				}
