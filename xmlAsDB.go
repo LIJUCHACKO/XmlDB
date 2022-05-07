@@ -1173,11 +1173,9 @@ func update_nodevalue(DB *Database, nodeId int, new_value string) ([]int, error)
 	}
 	value := GetNodeValue(DB, nodeId)
 	result := ""
-	if len(value) == 0 && Nooflines == 1 {
-		if strings.Contains(content, "/>") {
-			parts := strings.Split(content, "/>")
-			result = parts[0] + ">" + new_value + "</" + GetNodeName(DB, nodeId) + ">"
-		}
+	if len(value) == 0 && Nooflines == 1 && strings.Contains(content, "/>") {
+		parts := strings.Split(content, "/>")
+		result = parts[0] + ">" + new_value + "</" + GetNodeName(DB, nodeId) + ">"
 	} else {
 		parts := strings.Split(content, ">")
 		if len(parts) > 1 {
@@ -2221,4 +2219,58 @@ func NodeDebug(DB *Database, nodeId int) {
 	}
 
 	return
+}
+
+func MergeNodes(DB *Database, fromNodeId int, toNodeId int) error {
+	//merge attributes only copy if not present
+	labels1, values1 := GetAllNodeAttributes(DB, fromNodeId)
+	labels2, _ := GetAllNodeAttributes(DB, toNodeId)
+	for index1, label1 := range labels1 {
+		label_present := false
+		for _, label2 := range labels2 {
+			if label1 == label2 {
+				label_present = true
+			}
+		}
+		if !label_present {
+			UpdateAttributevalue(DB, toNodeId, label1, values1[index1])
+		}
+	}
+
+	childnodes_From := ChildNodes(DB, fromNodeId)
+	childnodes_To := ChildNodes(DB, toNodeId)
+	for _, child_node1 := range childnodes_From {
+		node_name1 := GetNodeName(DB, child_node1)
+		child_considered := false
+		for _, child_node2 := range childnodes_To {
+			node_name2 := GetNodeName(DB, child_node2)
+			if node_name1 == node_name2 {
+				err := MergeNodes(DB, child_node1, child_node2)
+				if err != nil {
+					return err
+				}
+				child_considered = true
+			}
+		}
+		if !child_considered {
+			//copy child
+			_, err := InserSubNode(DB, toNodeId, GetNodeContentRaw(DB, child_node1))
+			if err != nil {
+				return err
+			}
+		}
+	}
+	if len(childnodes_From) == 0 {
+		//<a/> or <a></a>
+		//assign value if not present
+		old_value := GetNodeValue(DB, toNodeId)
+		if len(old_value) == 0 {
+			new_value := GetNodeValue(DB, fromNodeId)
+			_, err := update_nodevalue(DB, toNodeId, new_value)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
