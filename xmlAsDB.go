@@ -2227,6 +2227,9 @@ func NodeDebug(DB *Database, nodeId int) {
 
 func MergeNodes(DB *Database, fromNodeId int, toNodeId int) error {
 	//merge attributes only copy if not present
+	for DB.WriteLock {
+		fmt.Printf("Waiting for WriteLock-MergeNodes\n")
+	}
 	labels1, values1 := GetAllNodeAttributes(DB, fromNodeId)
 	labels2, _ := GetAllNodeAttributes(DB, toNodeId)
 	for index1, label1 := range labels1 {
@@ -2277,4 +2280,34 @@ func MergeNodes(DB *Database, fromNodeId int, toNodeId int) error {
 		}
 	}
 	return nil
+}
+
+func GetListofWithAttribute(DB *Database, Attribute string) []int {
+	var ResultIds []int
+	for DB.WriteLock {
+		fmt.Printf("Waiting for WriteLock-GetListofWithAttribute\n")
+	}
+	nodeId := 0
+	i := NodeLine(DB, nodeId)
+	if i < 0 {
+		return ResultIds
+	}
+	end := NodeEnd(DB, nodeId)
+	if DB.Debug_enabled {
+		fmt.Printf("getNodeContents :Fetching Contents from line %d to %d \n", i, end)
+	}
+	for {
+		if i >= end {
+			break
+		}
+		SegNo, index := getSegmenNoIndex(DB, i)
+
+		if strings.Contains(DB.global_attributes[SegNo][index], Attribute+"=") {
+			ResultIds = append(ResultIds, DB.global_ids[i])
+		}
+		i++
+
+	}
+
+	return ResultIds
 }
