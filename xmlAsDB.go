@@ -661,6 +661,10 @@ func update_path(DB *Database, NodeName string, mode int) {
 	}
 
 	if mode == 3 {
+		if NodeName != DB.path[len(DB.path)-len(NodeName):] {
+			fmt.Printf("xml is corrupt  %s  not closed \n", NodeName)
+			os.Exit(1)
+		}
 		//path = path[0 : len(path)-len(NodeName)-1]
 		DB.path = DB.path + "/~"
 	}
