@@ -845,7 +845,7 @@ func parseAndLoadXml(DB *Database, content string) []int {
 						} else {
 							subparts := strings.Split(part, " ")
 							if len(subparts) > 1 {
-								attributebuffer.WriteString(strings.TrimSpace(subparts[1]) + "\"")
+								attributebuffer.WriteString(strings.TrimSpace(part[len(subparts[0]):]) + "\"")
 							}
 							NodeName = subparts[0]
 						}
@@ -899,7 +899,7 @@ func parseAndLoadXml(DB *Database, content string) []int {
 							} else {
 								subparts := strings.Split(part, " ")
 								if len(subparts) > 1 {
-									attributebuffer.WriteString(strings.TrimSpace(subparts[1]) + "\"")
+									attributebuffer.WriteString(strings.TrimSpace(part[len(subparts[0]):]) + "\"")
 								}
 								NodeName = subparts[0]
 							}
@@ -1261,7 +1261,7 @@ func UpdateAttributevalue(DB *Database, nodeId int, label string, value string) 
 		} else {
 			subparts := strings.Split(part, " ")
 			if len(subparts) > 1 {
-				attributebuffer.WriteString(strings.TrimSpace(subparts[1]) + "\"")
+				attributebuffer.WriteString(strings.TrimSpace(part[len(subparts[0]):]) + "\"")
 			}
 		}
 
