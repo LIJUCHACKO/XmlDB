@@ -391,61 +391,33 @@ func insertid_intohashtable(DB *Database, hashno int, nodeId int) {
 		DB.pathKeylookup[hashno] = append(DB.pathKeylookup[hashno], nodeId)
 		return
 	}
-	//fmt.Println(DB.pathKeylookup[hashno])
-	lineno := DB.reference_linenotoinsert
-	//fmt.Println(nodeId)
-	LowLM := 0
-	UpLM := len(DB.pathKeylookup[hashno]) - 1
-	MidLM := 0
-	index := -1
-	if DB.nodeNoToLineno[DB.pathKeylookup[hashno][LowLM]] == DB.nodeNoToLineno[DB.pathKeylookup[hashno][UpLM]] {
-		if DB.nodeNoToLineno[DB.pathKeylookup[hashno][LowLM]] == lineno {
-			DB.pathKeylookup[hashno] = append(DB.pathKeylookup[hashno], nodeId)
-			return
-		}
-	}
+
+	index :=len(DB.pathKeylookup[hashno])-1
+	lastno := len(DB.pathKeylookup[hashno])
+
 	for {
-		MidLM = int((LowLM + UpLM) / 2)
-		if lineno >= DB.nodeNoToLineno[DB.pathKeylookup[hashno][LowLM]] && lineno < DB.nodeNoToLineno[DB.pathKeylookup[hashno][MidLM]] {
-			if DB.nodeNoToLineno[DB.pathKeylookup[hashno][LowLM]] == DB.nodeNoToLineno[DB.pathKeylookup[hashno][MidLM]] {
-				LowLM = MidLM
-			} else {
-				UpLM = MidLM
+		if(DB.nodeNoToLineno[DB.pathKeylookup[hashno][index]]> DB.reference_linenotoinsert  ){
+			lastno=index;
+			index=index-1;
+			if(index<0){
+			  break
 			}
-
-		} else if lineno >= DB.nodeNoToLineno[DB.pathKeylookup[hashno][MidLM]] && lineno <= DB.nodeNoToLineno[DB.pathKeylookup[hashno][UpLM]] {
-			if DB.nodeNoToLineno[DB.pathKeylookup[hashno][UpLM]] == DB.nodeNoToLineno[DB.pathKeylookup[hashno][MidLM]] {
-				UpLM = MidLM
-			} else {
-				LowLM = MidLM
-			}
-
-		} else {
-			break
-		}
-		//fmt.Printf("\n%d  %d  %d", UpLM, MidLM, LowLM)
-		if UpLM == LowLM || UpLM == (LowLM+1) {
-			index = UpLM
+		}else{
 			break
 		}
 
 	}
-	if index < 0 {
-		if lineno < DB.nodeNoToLineno[DB.pathKeylookup[hashno][0]] {
-			index = 0
-		} else {
-			DB.pathKeylookup[hashno] = append(DB.pathKeylookup[hashno], nodeId)
-			//fmt.Printf("\ninsertid_intohashtable")
-			//fmt.Println(DB.pathKeylookup[hashno])
-			return
-		}
-
-	}
-	DB.pathKeylookup[hashno] = append(DB.pathKeylookup[hashno][:index+1], DB.pathKeylookup[hashno][index:]...) // index < len(a)
-	DB.pathKeylookup[hashno][index] = nodeId
-	//fmt.Printf("\ninsertid_intohashtable-%d", index)
+	if(lastno > len(DB.pathKeylookup[hashno])-1){
+       	  DB.pathKeylookup[hashno] = append(DB.pathKeylookup[hashno], nodeId)
+      	  return
+    	}
+    	DB.pathKeylookup[hashno] = append(DB.pathKeylookup[hashno][:lastno+1], DB.pathKeylookup[hashno][lastno:]...) // index < len(a)
+	DB.pathKeylookup[hashno][lastno] = nodeId
+	//fmt.Printf("\ninsertid_intohashtable-%d", lastno)
 	//fmt.Println(DB.pathKeylookup[hashno])
 	return
+
+
 }
 func remove_string(a []string, index int) []string {
 	if len(a) == index { // nil or empty slice or after last element
@@ -1120,8 +1092,10 @@ func GetNodeAttribute(DB *Database, nodeId int, label string) string {
 	attributes := strings.Split(DB.global_attributes[SegNo][index], "||")
 	for _, attri := range attributes {
 		attri := strings.TrimSpace(attri)
-		if attri[0:len(label)+1] == label+"=" {
-			return attri[len(label)+2 : len(attri)-1]
+		if(len(attri)>len(label)+1){
+			if attri[0:len(label)+1] == label+"=" {
+				return attri[len(label)+2 : len(attri)-1]
+			}
 		}
 	}
 	return ""
