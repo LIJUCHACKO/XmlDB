@@ -1776,8 +1776,13 @@ func LocateRequireParentdNode(DB *Database, parent_nodeLine int, RequiredPath st
 	for _, start := range suspectedLineStarts {
 
 		if start >= parent_nodeLine && start <= LineNo_inp {
+
 			if start > requiredline {
-				requiredline = start
+				SegNo, index = getSegmenNoIndex(DB, start)
+				_, _, stat := compare_path(DB.global_paths[SegNo][index], RequiredPath)
+				if(stat){
+					requiredline = start
+				}
 			}
 		}
 		i++
