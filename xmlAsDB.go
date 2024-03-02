@@ -1110,7 +1110,7 @@ func GetNodeValue(DB *Database, nodeId int) string {
 		return ""
 	}
 	SegNo, index := getSegmenNoIndex(DB, lineno)
-	return DB.global_values[SegNo][index]
+	return ReplaceHTMLSpecialEntities(DB.global_values[SegNo][index])
 }
 func GetNodeName(DB *Database, nodeId int) string {
 	for DB.WriteLock {
