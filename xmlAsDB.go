@@ -53,6 +53,7 @@ func ReplaceHTMLSpecialEntities(input string) string {
 	output := strings.Replace(input, "&amp;", "&", -1)
 	output = strings.Replace(output, "&lt;", "<", -1)
 	output = strings.Replace(output, "&gt;", ">", -1)
+	output = strings.Replace(output, "&#xA;", "\n",-1)
 	output = strings.Replace(output, "&quot;", "\"", -1)
 	output = strings.Replace(output, "&lsquo;", "‘", -1)
 	output = strings.Replace(output, "&rsquo;", "’", -1)
@@ -60,21 +61,67 @@ func ReplaceHTMLSpecialEntities(input string) string {
 	output = strings.Replace(output, "&ndash;", "–", -1)
 	output = strings.Replace(output, "&mdash;", "—", -1)
 	output = strings.Replace(output, "&apos;", "'", -1)
-
+	output = strings.Replace(output, "&lpar;", "(", -1)
+    output = strings.Replace(output, "&rpar;", ")", -1)
+    output = strings.Replace(output, "&ast;", "*", -1)
+    output = strings.Replace(output, "&plus;", "+", -1)
+    output = strings.Replace(output, "&comma;", ",", -1)
+    output = strings.Replace(output, "&period;", ".", -1)
+    output = strings.Replace(output, "&sol;", "/", -1)
+    output = strings.Replace(output, "&bsol;", "\\", -1)
+    output = strings.Replace(output, "&colon;", ":", -1)
+    output = strings.Replace(output, "&quest;", "?", -1)
+    output = strings.Replace(output, "&commat;", "@", -1)
+    output = strings.Replace(output, "&lsqb;", "[", -1)
+    output = strings.Replace(output, "&rsqb;", "]", -1)
+    output = strings.Replace(output, "&Hat;", "^", -1)
+    output = strings.Replace(output, "&grave;", "`", -1)
+    output = strings.Replace(output, "&verbar;", "|", -1)
+    output = strings.Replace(output, "&lcub;", "{", -1)
+    output = strings.Replace(output, "&rcub;", "}", -1)
+    output = strings.Replace(output,"&amp;", "&", -1)
+    output = strings.Replace(output, "&semi;", ";", -1)//& and ;
 	return output
 }
-func ReplacewithHTMLSpecialEntities(input string) string {
-	output := strings.Replace(input, "&", "&amp;", -1)
+func ReplacewithHTMLSpecialEntities(DB *Database,input string) string {
+	output :=input
+	if !DB.libreofficemod {
+        	output = strings.Replace(output, ";", "$semi$",-1)//& and ; create problem
+        }
+
+
+	output = strings.Replace(output, "&", "&amp;", -1)
 	output = strings.Replace(output, "<", "&lt;", -1)
 	output = strings.Replace(output, ">", "&gt;", -1)
-	output = strings.Replace(output, "\"", "&quot;", -1)
-	output = strings.Replace(output, "‘", "&lsquo;", -1)
-	output = strings.Replace(output, "’", "&rsquo;", -1)
-	output = strings.Replace(output, "~", "&tilde;", -1)
-	output = strings.Replace(output, "–", "&ndash;", -1)
-	output = strings.Replace(output, "—", "&mdash;", -1)
-	output = strings.Replace(output, "'", "&apos;", -1)
-
+	if !DB.libreofficemod {
+		output = strings.Replace(output,"\n", "&#xA;", -1)	
+		output = strings.Replace(output, "\"", "&quot;", -1)
+		output = strings.Replace(output, "‘", "&lsquo;", -1)
+		output = strings.Replace(output, "’", "&rsquo;", -1)
+		output = strings.Replace(output, "~", "&tilde;", -1)
+		output = strings.Replace(output, "–", "&ndash;", -1)
+		output = strings.Replace(output, "—", "&mdash;", -1)
+		output = strings.Replace(output, "'", "&apos;", -1)
+		output = strings.Replace(output, "(", "&lpar;", -1)
+		output = strings.Replace(output, ")", "&rpar;", -1)
+		output = strings.Replace(output, "*", "&ast;", -1)
+		output = strings.Replace(output, "+", "&plus;", -1)
+		output = strings.Replace(output, ",", "&comma;", -1)
+		output = strings.Replace(output, ".", "&period;", -1)
+		output = strings.Replace(output, "/", "&sol;", -1)
+		output = strings.Replace(output, "\\", "&bsol;", -1)
+		output = strings.Replace(output, ":", "&colon;", -1)
+		output = strings.Replace(output, "?", "&quest;", -1)
+		output = strings.Replace(output, "@", "&commat;", -1)
+		output = strings.Replace(output, "[", "&lsqb;", -1)
+		output = strings.Replace(output, "]", "&rsqb;", -1)
+		output = strings.Replace(output, "^", "&Hat;", -1)
+		output = strings.Replace(output, "`", "&grave;", -1)
+		output = strings.Replace(output, "|", "&verbar;", -1)
+		output = strings.Replace(output, "{", "&lcub;", -1)
+		output = strings.Replace(output, "}", "&rcub;", -1)
+		output = strings.Replace(output, "$semi$", "&semi;", -1)
+    }
 	return output
 }
 
@@ -89,6 +136,7 @@ type Database struct {
 	global_attributes        [][]string
 	global_lineLastUniqueid  int
 	Debug_enabled            bool
+	libreofficemod			bool
 	nodeNoToLineno           []int
 	pathKeylookup            [][]int
 	Nodeendlookup            []int
@@ -1131,7 +1179,7 @@ func UpdateNodevalue(DB *Database, nodeId int, new_value string) ([]int, error) 
 		fmt.Printf("Waiting for WriteLock-UpdateNodevalue\n")
 	}
 
-	nodes, err := update_nodevalue(DB, nodeId, ReplacewithHTMLSpecialEntities(new_value))
+	nodes, err := update_nodevalue(DB, nodeId, ReplacewithHTMLSpecialEntities(DB,new_value))
 
 	return nodes, err
 }
@@ -1911,7 +1959,7 @@ func locateNodeLine(DB *Database, parent_nodeLine int, QUERY string, RegExp stri
 										if isRegExp {
 											match, _ = regexp.MatchString(valueorAttribute, DB.global_values[SegNo][index])
 										} else {
-											valueorAttribute = ReplacewithHTMLSpecialEntities(valueorAttribute)
+											valueorAttribute = ReplacewithHTMLSpecialEntities(DB,valueorAttribute)
 											match = (valueorAttribute == strings.TrimSpace(DB.global_values[SegNo][index]))
 										}
 										if !match {
