@@ -85,7 +85,7 @@ func ReplaceHTMLSpecialEntities(input string) string {
 }
 func ReplacewithHTMLSpecialEntities(DB *Database,input string) string {
 	output :=input
-	if !DB.libreofficemod {
+	if !DB.Libreofficemod {
         	output = strings.Replace(output, ";", "$semi$",-1)//& and ; create problem
         }
 
@@ -93,7 +93,7 @@ func ReplacewithHTMLSpecialEntities(DB *Database,input string) string {
 	output = strings.Replace(output, "&", "&amp;", -1)
 	output = strings.Replace(output, "<", "&lt;", -1)
 	output = strings.Replace(output, ">", "&gt;", -1)
-	if !DB.libreofficemod {
+	if !DB.Libreofficemod {
 		output = strings.Replace(output,"\n", "&#xA;", -1)	
 		output = strings.Replace(output, "\"", "&quot;", -1)
 		output = strings.Replace(output, "‘", "&lsquo;", -1)
@@ -136,7 +136,7 @@ type Database struct {
 	global_attributes        [][]string
 	global_lineLastUniqueid  int
 	Debug_enabled            bool
-	libreofficemod			bool
+	Libreofficemod			bool
 	nodeNoToLineno           []int
 	pathKeylookup            [][]int
 	Nodeendlookup            []int
@@ -1190,7 +1190,7 @@ func update_nodevalue(DB *Database, nodeId int, new_value string) ([]int, error)
 		fmt.Printf("Error :Cannot update value- Node contains subnodes\n")
 		return []int{}, errors.New("Cannot update value- Node contains subnodes")
 	}
-	content := GetNodeContents(DB, nodeId)
+	content := GetNodeContentRaw(DB, nodeId)
 	content = strings.ReplaceAll(content, "\n", "-")
 	content = strings.ReplaceAll(content, "><", ">-<")
 	if len(content) == 0 {
@@ -1776,6 +1776,7 @@ func AppendAfterNode(DB *Database, nodeId int, sub_xml string) ([]int, error) {
 
 		return []int{}, errors.New("node  doesnot exist")
 	}
+	//fmt.Printf("SUBXML=\n"+sub_xml+"\n")
 	nodes, err := insertAtLine(DB, end, sub_xml, -1)
 
 	return nodes, err
@@ -2218,7 +2219,7 @@ func GetNode(DB *Database, parent_nodeId int, QUERY_inp string) ([]int, []string
 }
 func NodeDebug(DB *Database, nodeId int) {
 	for DB.WriteLock {
-		fmt.Printf("Waiting for WriteLock-GetNodeContents\n")
+		fmt.Printf("Waiting for WriteLock-NodeDebug\n")
 	}
 
 	i := NodeLine(DB, nodeId)
@@ -2227,7 +2228,7 @@ func NodeDebug(DB *Database, nodeId int) {
 	}
 	end := NodeEnd(DB, nodeId)
 	if DB.Debug_enabled {
-		fmt.Printf("getNodeContents :Fetching Contents from line %d to %d \n", i, end)
+		fmt.Printf("NodeDebug :Fetching Contents from line %d to %d \n", i, end)
 	}
 	for {
 		if i >= end {
