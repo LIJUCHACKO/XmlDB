@@ -529,14 +529,16 @@ func formatxml(lines []string) []string {
 		}
 		line_n := space + line
 		newlines = append(newlines, line_n)
-		if line[0:2] == "</" {
-			level--
-		} else if line[0:1] == "<" && strings.Contains(line, "</") {
-			level--
-		} else if line[len(line)-2:] == "/>" {
-			level--
-		} else if line[0:2] == "<!" {
-			level--
+		if len(line)>2 {
+			if line[0:2] == "</" {
+				level--
+			} else if line[0:1] == "<" && strings.Contains(line, "</") {
+				level--
+			} else if line[len(line)-2:] == "/>" {
+				level--
+			} else if line[0:2] == "<!" {
+				level--
+			}
 		}
 	}
 	return newlines
@@ -993,7 +995,7 @@ func Dump_DB(DB *Database) string {
 		for _, line := range item {
 			line = strings.ReplaceAll(line, "<nil:node>", "")
 			line = strings.ReplaceAll(line, "</nil:node>", "")
-			final.WriteString(line)
+			final.WriteString(line+"\n")
 
 		}
 	}
