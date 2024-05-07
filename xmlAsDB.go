@@ -231,6 +231,7 @@ func suspectedLinenos(DB *Database, path string, lowerbound int, upperbound int)
 	return suspectedLineStarts, suspectedLineEnds
 }
 func compare_path(current_path string, reference_path string) ([]string, []string, bool) {
+	//multiple /../ is not supported
 	ref_pathParts := strings.Split(reference_path, "/")
 	cur_pathParts := strings.Split(current_path, "/")
 	len_cur_pathParts := len(cur_pathParts)
@@ -272,9 +273,20 @@ func compare_path(current_path string, reference_path string) ([]string, []strin
 			continue
 		}
 		if cur_pathParts[cur_pathPartindex] == ref_pathParts[ref_pathPartindex] {
-			skipoccured = false
-			cur_pathPartindex++
-			ref_pathPartindex++
+			 if skipoccured {
+                //and also if remaining no of parts are same
+                //to handle ../<x>/node
+                // /../df/dfd/df/     /df/ df/dfdf/ d/
+                //if node names are repeating down the line
+                if (len_cur_pathParts-cur_pathPartindex) == (len_ref_pathParts-ref_pathPartindex) {
+                    skipoccured = false;
+                    ref_pathPartindex++;
+                }
+            }else{
+                ref_pathPartindex++;
+            }
+             cur_pathPartindex++;
+
 		} else {
 			if skipoccured {
 				cur_pathPartindex++
